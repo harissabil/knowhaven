@@ -152,7 +152,8 @@ export default function Containers() {
                 c.name,
                 c.source,
                 <span key="b" className="flex items-center gap-1"><Badge v={c.tier} />{!c.mapped && <Badge v="unmapped" />}</span>,
-                c.tier === "open" ? l("Semua anggota", "All members") : c.role_ids.map(roleName).join(", ") || "—",
+                // Access comes only from the role list; the tier just shapes "I don't know" answers.
+                c.mapped && c.role_ids.length ? c.role_ids.map(roleName).join(", ") : <span key="n" className="text-bad">{l("Tidak ada (tak terlihat siapa pun)", "None (visible to nobody)")}</span>,
                 c.item_count,
                 <button key="e" className="btn !py-1 !px-2 text-xs" onClick={() => edit(c)}>{l("Ubah", "Edit")}</button>,
               ],

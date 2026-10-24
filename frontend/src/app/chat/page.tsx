@@ -16,6 +16,9 @@ import {
   Sparkles,
   AlertTriangle,
   RotateCcw,
+  X,
+  Download,
+  ExternalLink,
 } from "lucide-react";
 import { Shell } from "@/components/Shell";
 import { Mascot, type MascotState } from "@/components/mascot/Mascot";
@@ -23,7 +26,7 @@ import { SUGGESTIONS } from "@/mock/chat";
 import { useL, useT } from "@/lib/i18n";
 import { useSession } from "@/store/session";
 import { apiStream, apiFetch, errorText, type CitationItem, type FinalEventData, type TraceEventData } from "@/lib/api";
-import type { ConversationOut, MessageOut } from "@/lib/contracts";
+import type { ConversationOut, MessageOut, SourceOut } from "@/lib/contracts";
 import { toast } from "@/components/ui/Toast";
 
 interface Msg {
@@ -35,6 +38,7 @@ interface Msg {
   error?: string;
   at: string;
   streaming?: boolean;
+  queryId?: string | null; // history: the step log is fetched when opened
 }
 
 function kindOf(type: string): "chat" | "task" | "doc" {
@@ -92,7 +96,17 @@ export default function Chat() {
         const history = await apiFetch<MessageOut[]>(`/api/conversations/${last.id}`);
         if (cancelled) return;
         setConversationId(last.id);
-        setMsgs(history.map((m) => ({ role: m.role === "user" ? "user" : "bot", text: m.content, at: fmt(m.created_at) })));
+        setMsgs(history.map((m): Msg => m.role === "user"
+          ? { role: "user", text: m.content, at: fmt(m.created_at) }
+          : {
+              role: "bot", text: m.content, at: fmt(m.created_at), queryId: m.query_id,
+              final: {
+                query_id: m.query_id ?? "", conversation_id: last.id, answer: m.content,
+                decision_path: (m.decision_path ?? "answer") as FinalEventData["decision_path"],
+                citations: m.sources.map((c) => ({ ...c, url: null })), conflicts: [], stale_doc_ids: [],
+                access_offer: null, notes: [], action_draft_ids: [], data_as_of: null, latency_ms: 0,
+              },
+            }));
       } catch {
         // no history is fine
       }
@@ -104,6 +118,34 @@ export default function Chat() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [msgs, state]);
+
+  // "Ask Havi" from a document page pre-fills the question.
+  useEffect(() => {
+    const pre = new URLSearchParams(window.location.search).get("q");
+    if (pre) setQ(pre.slice(0, 2000));
+  }, []);
+
+  const [preview, setPreview] = useState<{ id: string; data?: SourceOut; missing?: boolean } | null>(null);
+  async function openSource(id: string) {
+    setPreview({ id });
+    try {
+      setPreview({ id, data: await apiFetch<SourceOut>(`/api/sources/${encodeURIComponent(id)}`) });
+    } catch {
+      setPreview({ id, missing: true }); // forbidden and missing look the same
+    }
+  }
+
+  async function toggleTrace(i: number, m: Msg) {
+    setOpenTraceIdx(openTraceIdx === i ? null : i);
+    if (m.queryId && !m.traces?.length) {
+      try {
+        const steps = await apiFetch<{ step: number; label: string; name: string; ms: number | null; summary: string | null }[]>(`/api/queries/${m.queryId}/trace`);
+        patchMsg(i, { traces: steps.map((x) => ({ step: x.step, label: x.label, name: x.name, status: "done", ms: x.ms ?? undefined, summary: x.summary ?? undefined })) });
+      } catch {
+        // no trace stored for this message; the header just stays empty
+      }
+    }
+  }
 
   const patchMsg = (idx: number, p: Partial<Msg> | ((m: Msg) => Partial<Msg>)) =>
     setMsgs((prev) => prev.map((m, i) => (i === idx ? { ...m, ...(typeof p === "function" ? p(m) : p) } : m)));
@@ -245,30 +287,30 @@ export default function Chat() {
                     }`}
                   >
                     {/* Pipeline trace badge header */}
-                    {isBot && m.traces && m.traces.length > 0 && (
+                    {isBot && ((m.traces && m.traces.length > 0) || m.queryId) && (
                       <div className="border-b border-line/60 pb-2 mb-1">
                         <button
                           type="button"
-                          onClick={() => setOpenTraceIdx(isTraceOpen ? null : i)}
+                          onClick={() => toggleTrace(i, m)}
                           className="flex items-center gap-1.5 text-xs text-muted hover:text-brand font-mono transition-colors"
                         >
                           <Activity size={13} className={`text-brand ${m.streaming ? "animate-pulse" : ""}`} />
                           <span>
-                            {l("Pipeline 8 langkah", "8-step pipeline")} ({m.traces.filter((tr) => tr.status === "done").length}/8)
-                            {f ? ` · ${(f.latency_ms / 1000).toFixed(1)} s` : ""}
+                            {l("Pipeline 8 langkah", "8-step pipeline")} {m.traces?.length ? `(${m.traces.filter((tr) => tr.status === "done").length}/8)` : ""}
+                            {f?.latency_ms ? ` · ${(f.latency_ms / 1000).toFixed(1)} s` : ""}
                           </span>
                           {isTraceOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
                         </button>
 
                         <AnimatePresence>
-                          {isTraceOpen && (
+                          {isTraceOpen && !!m.traces?.length && (
                             <motion.div
                               initial={{ opacity: 0, height: 0 }}
                               animate={{ opacity: 1, height: "auto" }}
                               exit={{ opacity: 0, height: 0 }}
                               className="overflow-hidden mt-2 flex flex-col gap-1 bg-surface2/60 p-2.5 rounded-erp font-mono text-[0.75rem]"
                             >
-                              {m.traces.map((tr) => (
+                              {m.traces!.map((tr) => (
                                 <div key={tr.step} className="flex items-center gap-2 text-muted" title={tr.summary}>
                                   <span className="w-4 text-center">{tr.step}</span>
                                   <span className="px-1.5 py-0.5 rounded bg-surface border border-line text-[0.65rem] font-semibold text-fg">
@@ -364,14 +406,15 @@ export default function Chat() {
                           <div className="mt-2 pt-2 border-t border-line/60 flex flex-wrap items-center gap-1.5">
                             <span className="text-xs text-muted mr-1">{t("sources")}:</span>
                             {cites.map((c, n) => (
-                              <a
+                              <button
                                 key={c.id}
-                                href={`/sources/${encodeURIComponent(c.id)}`}
+                                type="button"
+                                onClick={() => openSource(c.id)}
                                 className={`btn !py-1 !px-2.5 text-xs hover:border-brand inline-flex items-center gap-1.5 ${f.stale_doc_ids.includes(c.id) ? "opacity-60 line-through" : ""}`}
                                 title={`${c.title} · ${c.container}${c.date ? ` · ${c.date}` : ""}`}
                               >
                                 [{n + 1}] {KIND_ICON[kindOf(c.type)]} {c.title || c.id}
-                              </a>
+                              </button>
                             ))}
                           </div>
                         )}
@@ -409,6 +452,45 @@ export default function Chat() {
           </form>
         </div>
       </div>
+
+      {preview && (
+        <div className="fixed inset-0 z-50 bg-black/30 flex justify-end" onClick={() => setPreview(null)}>
+          <aside role="dialog" aria-modal="true" aria-label={l("Pratinjau sumber", "Source preview")}
+            className="h-full w-full max-w-xl bg-surface border-l border-line shadow-xl flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start gap-2 p-4 border-b border-line">
+              <div className="flex-1 min-w-0">
+                <p className="eyebrow font-mono truncate">{preview.id}</p>
+                <h2 className="font-semibold text-lg truncate">{preview.data?.title ?? (preview.missing ? l("Sumber tidak tersedia", "Source unavailable") : "…")}</h2>
+                {preview.data && <p className="text-xs text-muted">{preview.data.container} · {preview.data.authority} · {new Date(preview.data.updated_at).toLocaleDateString()}</p>}
+              </div>
+              <button className="btn !p-1.5" onClick={() => setPreview(null)} aria-label="close"><X size={16} /></button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-2">
+              {!preview.data && !preview.missing && <p className="text-muted animate-pulse">{l("Memeriksa izin…", "Checking permissions…")}</p>}
+              {preview.missing && <p className="text-muted text-sm">{l("Sumber ini tidak ada atau di luar akses peran Anda saat ini.", "This source doesn't exist or is outside your roles' current access.")}</p>}
+              {preview.data?.injection_flag && (
+                <p className="text-xs p-2 rounded-erp border border-warn/40 bg-warn/10 text-warn">{l("Berisi teks mirip instruksi untuk AI; diperlakukan sebagai data.", "Contains instruction-like text aimed at the AI; treated as data.")}</p>
+              )}
+              {preview.data?.chunks.map((c) => (
+                <div key={c.citation_id} className={`p-3 rounded-erp border whitespace-pre-wrap text-sm leading-relaxed ${c.citation_id === preview.id ? "bg-tint border-brand" : "bg-surface2/60 border-line"}`}>
+                  {c.anchor && <p className="eyebrow mb-1">{c.anchor}</p>}
+                  {c.text}
+                </div>
+              ))}
+            </div>
+            {preview.data && (
+              <div className="p-4 border-t border-line flex gap-2 flex-wrap">
+                {preview.data.source === "upload" && (
+                  <a className="btn" href={`/documents/${encodeURIComponent(preview.data.id)}`}><FileText size={14} /> {l("Buka dokumen", "Open document")}</a>
+                )}
+                {preview.data.download_url && <a className="btn" href={preview.data.download_url} target="_blank" rel="noreferrer"><Download size={14} /> {l("File asli", "Original file")}</a>}
+                {preview.data.url && <a className="btn" href={preview.data.url} target="_blank" rel="noreferrer"><ExternalLink size={14} /> {l("Buka di sumber", "Open at source")}</a>}
+                <a className="btn ml-auto" href={`/sources/${encodeURIComponent(preview.id)}`}>{l("Halaman penuh", "Full page")}</a>
+              </div>
+            )}
+          </aside>
+        </div>
+      )}
     </Shell>
   );
 }

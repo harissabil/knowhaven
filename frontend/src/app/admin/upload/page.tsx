@@ -4,28 +4,29 @@ import { Upload, CheckCircle2, AlertTriangle } from "lucide-react";
 import { Shell } from "@/components/Shell";
 import { useL, useT } from "@/lib/i18n";
 import { apiFetch, errorText } from "@/lib/api";
-import type { ContainerOut, UploadOut } from "@/lib/contracts";
+import type { FolderOut, UploadOut } from "@/lib/contracts";
+import { Readers, nobodyCanRead } from "@/components/documents";
+import Link from "next/link";
 import { toast } from "@/components/ui/Toast";
 
-// Only upload folders and WhatsApp groups accept files (backend api/uploads.py).
-const UPLOADABLE = ["upload_folder", "whatsapp_group"];
 
 export default function UploadPage() {
   const t = useT();
   const l = useL();
-  const [containers, setContainers] = useState<ContainerOut[]>([]);
+  const [containers, setContainers] = useState<FolderOut[]>([]);
   const [loadErr, setLoadErr] = useState("");
   const [selected, setSelected] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState("");
   const [uploading, setUploading] = useState(false);
   const [err, setErr] = useState("");
+  const target = containers.find((c) => c.id === selected);
   const [result, setResult] = useState<(UploadOut & { filename: string; container: string }) | null>(null);
 
   useEffect(() => {
-    apiFetch<ContainerOut[]>("/api/admin/containers")
+    apiFetch<FolderOut[]>("/api/documents/folders")
       .then((res) => {
-        const ok = res.filter((c) => UPLOADABLE.includes(c.source));
+        const ok = res.filter((c) => c.can_upload);
         setContainers(ok);
         setSelected(ok[0]?.id ?? "");
       })
@@ -57,17 +58,25 @@ export default function UploadPage() {
       <div className="card p-6 flex flex-col gap-4 max-w-xl">
         {loadErr && (
           <p role="alert" className="text-bad text-sm">
-            {l("Daftar container tidak bisa dimuat (hanya admin): ", "Could not load containers (admins only): ")}{loadErr}
+            {l("Daftar folder tidak bisa dimuat: ", "Could not load folders: ")}{loadErr}
           </p>
         )}
         <label className="flex flex-col gap-1.5 font-medium text-sm">
           {l("Container tujuan", "Target container")}
           <select className="input" value={selected} onChange={(e) => setSelected(e.target.value)}>
             {containers.map((c) => (
-              <option key={c.id} value={c.id}>{c.name} ({c.source === "whatsapp_group" ? "WhatsApp" : "Upload"}, {c.tier})</option>
+              <option key={c.id} value={c.id}>{c.name} ({c.source === "whatsapp_group" ? "WhatsApp" : "Upload"})</option>
             ))}
           </select>
+          {target && <span className="text-xs font-normal"><Readers folder={target} /></span>}
         </label>
+        {nobodyCanRead(target) && (
+          <p role="alert" className="text-sm p-3 rounded-erp border border-bad/40 bg-bad/5">
+            {l("Folder ini belum diberi peran, jadi dokumen yang diunggah tidak akan muncul di jawaban siapa pun. ",
+              "This folder has no roles yet, so uploaded documents won't appear in anyone's answers. ")}
+            <Link className="underline" href="/admin/containers">{l("Atur akses folder", "Set folder access")}</Link>
+          </p>
+        )}
 
         <label className="flex flex-col gap-1.5 font-medium text-sm">
           {l("Judul (opsional)", "Title (optional)")}

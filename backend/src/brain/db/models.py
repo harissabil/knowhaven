@@ -121,6 +121,8 @@ class Tenant(Base):
     join_code_encrypted: Mapped[bytes | None] = mapped_column(LargeBinary)  # admin can view it
     # "Tidak tahu" fallback contact for unknown/hidden topics (11.1), e.g. "HR Helpdesk (hr@...)"
     default_contact: Mapped[str | None] = mapped_column(Text)
+    # Company facts every active member may know (name is always known); cited as COMPANY-profile.
+    profile: Mapped[str | None] = mapped_column(Text)
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
     )
