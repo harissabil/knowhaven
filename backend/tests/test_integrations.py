@@ -277,6 +277,11 @@ async def test_atlassian_connect_sync_adopt_and_delete(make_user):
             )
         ],
     )
+    # Imported too, but the live site has no such page: it must stop being cited (live = source of truth).
+    await _ingestor().ingest(tenant, [IngestItem(
+        source="confluence", container_external_id="HR", container_name="HR", external_ref="HR/kebijakan-lembur",
+        type="doc", text="", sections=[Section("1", "1. Uang Makan", "Rp50.000 per hari.")], title="Kebijakan Lembur",
+        id_hint="kebijakan-lembur", created_at=_now(), updated_at=_now(), url="https://srn-demo.atlassian.net/y")])  # fmt: skip
     pages = {
         "9001": ("SOP Reimbursement", SOP_V1, 4),
         "9002": ("Kebijakan Cuti", "<h1>Kebijakan Cuti</h1><p>12 hari.</p>", 1),
@@ -313,6 +318,11 @@ async def test_atlassian_connect_sync_adopt_and_delete(make_user):
         site
     )  # adopted: citation ID kept
     assert issue.structured["assignee"] == "Rina" and issue.type == "task"
+    async with tenant_session(tenant) as s:
+        lembur = await s.scalar(
+            select(SourceItem).where(SourceItem.external_ref == "HR/kebijakan-lembur")
+        )
+    assert lembur.deleted_at is not None  # imported copy without a live twin: retired
 
     listing = (await admin.get("/api/admin/integrations")).json()
     conf = next(i for i in listing["integrations"] if i["type"] == "confluence")
@@ -410,4 +420,70 @@ async def test_bot_joins_public_channels_but_not_private_ones():
     assert await slack.join_public("xoxb-t", [{"id": "C9"}], transport=missing) == (
         0,
         "missing_scope",
+    )
+
+
+async def test_demo_history_copies_keep_order_threads_and_dates():
+    from brain.integrations import slack_demo
+
+    calls = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        form = dict(httpx.QueryParams(req.content.decode()))
+        calls.append((req.url.path.rsplit("/", 1)[1], form))
+        if req.url.path.endswith("conversations.list"):
+            return httpx.Response(
+                200,
+                json={
+                    "ok": True,
+                    "channels": [{"id": "C9", "name": "general", "is_member": False}],
+                },
+            )
+        if req.url.path.endswith("conversations.create"):
+            return httpx.Response(200, json={"ok": True, "channel": {"id": "CNEW"}})
+        return httpx.Response(200, json={"ok": True, "ts": f"{len(calls)}.0"})
+
+    t = httpx.MockTransport(handler)
+    assert await slack_demo.ensure_channel("x", "general", t) == ("C9", False)
+    assert (
+        "conversations.join",
+        {"channel": "C9"},
+    ) in calls  # an existing channel is joined, not recreated
+    assert await slack_demo.ensure_channel("x", "pengumuman-hr", t) == ("CNEW", True)
+    channel = {"messages": [
+        {"user": "U0SARI", "at": "2026-09-02T09:00:00+07:00", "text": "Uang bensin naik jadi Rp750.000"},
+        {"user": "U0DIMAS", "at": "2026-09-02T09:05:00+07:00", "text": "Berlaku utk probation?", "reply_to": 0},
+    ]}  # fmt: skip
+    calls.clear()
+    n = await slack_demo.post_history("x", "CNEW", channel, {"U0SARI": "Sari Kusuma"}, t, pause=0)
+    first, reply = calls[0][1], calls[1][1]
+    assert (
+        n == 2
+        and first["username"] == "Sari Kusuma"
+        and first["text"].startswith("_[2 Sep 2026]_ Uang bensin")
+    )
+    assert reply["thread_ts"] == "1.0" and "thread_ts" not in first
+
+
+def test_effective_date_comes_from_the_page_header_not_the_save_time():
+    storage = (
+        '<table><tbody><tr><th><p>Berlaku sejak</p></th><td><p><time datetime="2026-03-01" /></p></td></tr></tbody></table>'
+        "<h2>3. Uang Bensin</h2><p>Rp500.000 per bulan.</p>"
+    )
+    page = {
+        "id": "1",
+        "title": "SOP",
+        "createdAt": "2026-10-24T10:00:00Z",
+        "version": {"number": 1, "createdAt": "2026-10-24T10:00:00Z"},
+        "body": {"storage": {"value": storage}},
+    }
+    item = atlassian.page_to_item(page, atlassian.Space("1", "HR", "HR"), "https://x.atlassian.net")
+    assert item.updated_at.date().isoformat() == "2026-03-01" and item.created_at <= item.updated_at
+    assert "2026-03-01" in atlassian.storage_to_markdown(storage)
+    page["body"]["storage"]["value"] = "<p>Tanpa tanggal.</p>"
+    assert (
+        atlassian.page_to_item(page, atlassian.Space("1", "HR", "HR"), "https://x")
+        .updated_at.date()
+        .isoformat()
+        == "2026-10-24"
     )

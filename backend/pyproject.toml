@@ -35,6 +35,7 @@ brain-seed = "brain.seed:main"
 brain-mcp = "brain.mcp_server.server:main"
 brain-mcp-token = "brain.mcp_server.token_cli:main"
 brain-worker = "brain.worker:main"
+brain-slack-demo = "brain.integrations.slack_demo:main"
 
 [build-system]
 requires = ["uv_build>=0.8.22,<0.9.0"]

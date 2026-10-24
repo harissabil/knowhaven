@@ -30,6 +30,11 @@ BOT_SCOPES = [
     "channels:read",
     "groups:read",
     "channels:join",  # join public channels by itself; private ones still need /invite @havi
+    # Demo helper only (brain-slack-demo): create the demo channels and post display copies of their
+    # history under persona names. Havi itself never writes to Slack.
+    "channels:manage",
+    "chat:write",
+    "chat:write.customize",
     "users:read",
     "users:read.email",
 ]
