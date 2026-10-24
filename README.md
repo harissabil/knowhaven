@@ -1,1 +1,1 @@
-kore ga knowhaven no frontend
+kore ga knowhaven no development branch
