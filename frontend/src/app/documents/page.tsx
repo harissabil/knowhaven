@@ -186,13 +186,13 @@ function UploadDialog({ folders, initial, onClose, onDone }: { folders: FolderOu
       <div role="dialog" aria-modal="true" aria-label={l("Unggah dokumen", "Upload document")} className="card p-5 w-full max-w-md flex flex-col gap-3" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center"><h2 className="font-semibold flex-1">{l("Unggah dokumen", "Upload document")}</h2>
           <button className="btn !p-1.5" onClick={onClose} aria-label="close"><X size={16} /></button></div>
-        <label className="flex flex-col gap-1 text-sm">{l("Folder", "Folder")}
+        <label className="field">{l("Folder", "Folder")}
           <select className="input" value={folderId} onChange={(e) => setFolderId(e.target.value)}>
             {folders.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
           </select>
         </label>
         {target && <p className="text-xs"><Readers folder={target} /></p>}
-        <label className="flex flex-col gap-1 text-sm">{l("Judul (opsional)", "Title (optional)")}
+        <label className="field">{l("Judul (opsional)", "Title (optional)")}
           <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} />
         </label>
         <button type="button" onClick={() => input.current?.click()}

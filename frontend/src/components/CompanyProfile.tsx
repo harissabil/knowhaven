@@ -56,19 +56,19 @@ export function CompanyProfileCard() {
       {err && <p role="alert" className="text-bad text-sm">{err}</p>}
       {form && (
         <>
-          <label className="flex flex-col gap-1 text-sm">{l("Nama perusahaan", "Company name")}
+          <label className="field">{l("Nama perusahaan", "Company name")}
             <input className="input" value={form.name} maxLength={120} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           </label>
-          <label className="flex flex-col gap-1 text-sm">{l("Kontak umum (dipakai saat Havi tidak tahu)", "General contact (used when Havi doesn't know)")}
+          <label className="field">{l("Kontak umum (dipakai saat Havi tidak tahu)", "General contact (used when Havi doesn't know)")}
             <input className="input" value={form.default_contact ?? ""} maxLength={200} placeholder="HR (hr@company.id)" onChange={(e) => setForm({ ...form, default_contact: e.target.value })} />
           </label>
-          <label className="flex flex-col gap-1 text-sm">{l("Tentang perusahaan", "About the company")}
+          <label className="field">{l("Tentang perusahaan", "About the company")}
             <textarea className="input min-h-32" value={form.profile ?? ""} maxLength={4000}
               placeholder={l("mis. Berdiri sejak 2020 di Jakarta. Bergerak di bidang distribusi.", "e.g. Founded in 2020 in Jakarta. We distribute consumer goods.")}
               onChange={(e) => setForm({ ...form, profile: e.target.value })} />
             <span className="text-xs text-muted text-right">{(form.profile ?? "").length}/4000</span>
           </label>
-          <div className="flex justify-end">
+          <div className="flex justify-end pt-4 border-t border-line">
             <button className="btn btn-primary" onClick={save} disabled={!dirty || busy || form.name.trim().length < 2}>
               <Save size={15} /> {busy ? l("Menyimpan…", "Saving…") : l("Simpan", "Save")}
             </button>

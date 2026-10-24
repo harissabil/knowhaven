@@ -47,7 +47,7 @@ const C = {
       ["Undang tim", "Karyawan langsung bisa bertanya, di web atau lewat WorkBuddy."],
     ],
     trustTitle: "Kode memutuskan. AI menjelaskan.",
-    trust: "Izin, masking data pribadi, dan validasi sitasi dikerjakan kode yang bisa diuji, bukan model. AI hanya memahami pertanyaan dan menyusun kalimat dari data yang sudah difilter.",
+    trust: "Hak akses, sensor data pribadi, dan keaslian sitasi dikunci oleh sistem, bukan tebakan AI. Model AI hanya merangkum dari sumber yang memang berhak Anda buka.",
     ctaTitle: "Berhenti mencari. Mulai bertanya.", ctaSub: "Siap dalam beberapa menit. Tanpa kartu kredit.",
     foot: "Knowhaven. Dibuat oleh Hokulele Software.",
   },
@@ -83,15 +83,15 @@ const C = {
       ["Invite your team", "People can ask right away, on the web or through WorkBuddy."],
     ],
     trustTitle: "Code decides. AI explains.",
-    trust: "Permissions, personal-data masking, and citation checks are done by testable code, not the model. AI only understands the question and words the answer from already-filtered data.",
+    trust: "Access control, PII masking, and citation checks are enforced by code, never left to AI guesswork. The model only summarizes sources you're already cleared to read.",
     ctaTitle: "Stop searching. Start asking.", ctaSub: "Ready in minutes. No credit card.",
     foot: "Knowhaven. Developed by Hokulele Software.",
   },
 };
 
 const MARQUEE = [
-  { name: "Slack", logo: "Slack", on: true }, { name: "Confluence", logo: "Atlassian", on: true },
-  { name: "Jira", logo: "Atlassian", on: true }, { name: "WhatsApp", logo: "WhatsApp", on: false },
+  { name: "Slack", logo: "Slack", on: true }, { name: "Confluence", logo: "Confluence", on: true },
+  { name: "Jira", logo: "Jira", on: true }, { name: "WhatsApp", logo: "WhatsApp", on: false },
   { name: "Telegram", logo: "Telegram", on: false },
 ];
 
@@ -131,8 +131,8 @@ export default function Landing() {
             <span className="w-1.5 h-1.5 rounded-full bg-brand animate-pulse" /> {c.pill}
           </motion.span> */}
           <motion.h1 initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08, duration: 0.6 }}
-            className="halo text-5xl md:text-7xl leading-[1.02] max-w-[1000px]">
-            {c.h1a} <span className="text-brand">{c.h1b}</span>
+            className="halo text-5xl md:text-7xl leading-[1.04] max-w-[900px]">
+            {c.h1a} <span className="block text-brand mt-1">{c.h1b}</span>
           </motion.h1>
           <motion.p initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2, duration: 0.6 }}
             className="text-lg md:text-xl text-muted max-w-2xl">{c.sub}</motion.p>
@@ -144,10 +144,12 @@ export default function Landing() {
             <Link href="/login" className="btn btn-lg">{c.demo}</Link>
           </motion.div>
         </div>
-        <div className="max-w-5xl mx-auto px-5 pt-6 pb-14">
-          <div className="hidden sm:block"><FlowScene lang={lang} /></div>
-          <div className="sm:hidden flex justify-center"><Mascot size={160} state={heroMood} /></div>
-        </div>
+      </section>
+
+      {/* FLOW SCENE */}
+      <section className="max-w-5xl w-full mx-auto px-5 pt-4 pb-20">
+        <div className="hidden sm:block"><FlowScene lang={lang} /></div>
+        <div className="sm:hidden flex justify-center"><Mascot size={160} state={heroMood} /></div>
       </section>
 
       {/* STATS (dark) */}

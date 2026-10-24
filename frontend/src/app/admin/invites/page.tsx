@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Shell } from "@/components/Shell";
 import { Table, Badge } from "@/components/Table";
+import { RoleChip } from "@/components/Chip";
 import { useL, useT } from "@/lib/i18n";
 import { useSession } from "@/store/session";
 import { apiFetch, errorText } from "@/lib/api";
@@ -102,38 +103,44 @@ export default function Invites() {
         </button>
       </div>
 
-      <div className="card p-4 mb-4 flex flex-wrap items-end gap-3">
-        <label className="flex flex-col gap-1 text-sm">{l("Peran awal", "Starting role")}
-          <select className="input !w-auto" value={roleId} onChange={(e) => setRoleId(e.target.value)}>
-            {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-          </select>
-        </label>
-        <label className="flex flex-col gap-1 text-sm">{l("Berlaku (hari)", "Valid (days)")}
-          <input className="input !w-24" type="number" min={1} max={30} value={days} onChange={(e) => setDays(Math.min(30, Math.max(1, Number(e.target.value) || 1)))} />
-        </label>
-        <label className="flex flex-col gap-1 text-sm">{l("Maks. pemakaian", "Max uses")}
-          <input className="input !w-24" type="number" min={1} max={100} value={maxUses} onChange={(e) => setMaxUses(Math.min(100, Math.max(1, Number(e.target.value) || 1)))} />
-        </label>
-        <button className="btn btn-primary" onClick={addInvite} disabled={!roleId}>
-          <UserPlus size={16} /> {l("Buat tautan undangan", "Create invite link")}
-        </button>
-        <button className="btn !py-1 !px-2.5 text-xs text-muted hover:text-fg inline-flex items-center gap-1.5 ml-auto" onClick={loadData} disabled={loading}>
-          <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
-          {l("Segarkan", "Refresh")}
-        </button>
+      <div className="card p-6 mb-6 flex flex-col gap-5">
+        <div className="grid sm:grid-cols-3 gap-5 items-end">
+          <label className="field">{l("Peran awal", "Starting role")}
+            <select className="input" value={roleId} onChange={(e) => setRoleId(e.target.value)}>
+              {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+            </select>
+          </label>
+          <label className="field">{l("Berlaku (hari)", "Valid (days)")}
+            <input className="input" type="number" min={1} max={30} value={days} onChange={(e) => setDays(Math.min(30, Math.max(1, Number(e.target.value) || 1)))} />
+          </label>
+          <label className="field">{l("Maks. pemakaian", "Max uses")}
+            <input className="input" type="number" min={1} max={100} value={maxUses} onChange={(e) => setMaxUses(Math.min(100, Math.max(1, Number(e.target.value) || 1)))} />
+          </label>
+        </div>
         {newLink && (
           <div className="w-full text-sm p-3 rounded-erp bg-surface2 border border-line flex items-center gap-2 flex-wrap">
             <span>{l("Tautan hanya ditampilkan sekali:", "The link is shown only once:")}</span>
             <code className="break-all">{newLink}</code>
-            <button className="btn !py-0.5 !px-2 text-xs" onClick={() => copy(newLink)}><Copy size={12} /> {l("Salin", "Copy")}</button>
+            <button className="btn !py-0.5 !px-2 text-xs ml-auto" onClick={() => copy(newLink)}><Copy size={12} /> {l("Salin", "Copy")}</button>
           </div>
         )}
+        <div className="flex justify-end pt-4 border-t border-line">
+          <button className="btn btn-primary" onClick={addInvite} disabled={!roleId}>
+            <UserPlus size={16} /> {l("Buat tautan undangan", "Create invite link")}
+          </button>
+        </div>
       </div>
 
+      <div className="flex items-center justify-end mb-3">
+        <button className="btn !py-1 !px-2.5 text-xs text-muted hover:text-fg inline-flex items-center gap-1.5" onClick={loadData} disabled={loading}>
+          <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
+          {l("Segarkan", "Refresh")}
+        </button>
+      </div>
       <Table
         head={[l("Peran awal", "Starting role"), l("Berlaku sampai", "Valid until"), l("Pemakaian", "Uses"), "Status", l("Aksi", "Action")]}
         rows={list.map((i) => [
-          i.role_key,
+          <RoleChip key="rk" role={i.role_key} />,
           new Date(i.expires_at).toLocaleString(lang === "id" ? "id-ID" : "en-US"),
           `${i.used_count}/${i.max_uses}`,
           <Badge key="b" v={i.revoked ? "revoked" : expired(i) ? "expired" : "active"} />,

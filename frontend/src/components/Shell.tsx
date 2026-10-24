@@ -2,18 +2,19 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { MessageSquare, CheckSquare, Users, Shield, Plug, Upload, ScrollText, FlaskConical, KeyRound, LogOut, Settings, FolderOpen, UserPlus, UserCog, User, ChevronDown, BookOpen, EyeOff } from "lucide-react";
+import { MessageSquare, CheckSquare, Users, Shield, Plug, Upload, ScrollText, FlaskConical, LogOut, Settings, FolderOpen, UserPlus, UserCog, User, ChevronDown, BookOpen, EyeOff } from "lucide-react";
 import { useSession, usePersona, useTenants } from "@/store/session";
 import { can, NAV, NAV_SECTIONS } from "@/lib/permissions";
 import { motion } from "framer-motion";
 import { useL, useT, type Key } from "@/lib/i18n";
-import { KnowhavenLogo } from "@/components/BrandLogos";
+import { RoleChip } from "@/components/Chip";
+import { KnowhavenLogo, WorkBuddyLogo } from "@/components/BrandLogos";
 import { Launcher, Palette } from "@/components/Extras";
 
 const ICON: Record<string, React.ReactNode> = {
   chat: <MessageSquare size={18} />, approvals: <CheckSquare size={18} />, members: <Users size={18} />,
   containers: <Shield size={18} />, integrations: <Plug size={18} />, upload: <Upload size={18} />,
-  audit: <ScrollText size={18} />, tests: <FlaskConical size={18} />, workbuddy: <KeyRound size={18} />,
+  audit: <ScrollText size={18} />, tests: <FlaskConical size={18} />, workbuddy: <WorkBuddyLogo size={18} />,
   settings: <Settings size={18} />, documents: <FolderOpen size={18} />,
   invites: <UserPlus size={18} />, managers: <UserCog size={18} />, topics: <BookOpen size={18} />, pii: <EyeOff size={18} />,
 };
@@ -96,10 +97,10 @@ export function Shell({ children, title, fullBleed }: { children: React.ReactNod
             {menu && (
               <div className="absolute right-0 top-full pt-2 z-20 min-w-56">
                 <div role="menu" className="rounded-xl border border-line bg-surface shadow-lg p-2 flex flex-col gap-1">
-                  <div className="px-3 py-2 border-b border-line mb-1">
+                  <div className="px-3 pt-3 pb-3.5 border-b border-line mb-1.5">
                     <div className="text-xs text-muted">{l("Peran Anda", "Your role")}</div>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {roles.map((r) => <span key={r} className="rounded-full bg-tint text-brand px-2.5 py-0.5 text-xs font-medium">{r}</span>)}
+                    <div className="flex flex-wrap gap-2 mt-2.5">
+                      {roles.map((r) => <RoleChip key={r} role={r} system={["owner", "admin", "auditor"].includes(r)} />)}
                     </div>
                   </div>
                   <button role="menuitem" className="flex items-center gap-2.5 px-3 py-2 rounded-full text-[0.95rem] text-muted hover:bg-surface2 hover:text-fg transition-colors text-left"
@@ -109,7 +110,8 @@ export function Shell({ children, title, fullBleed }: { children: React.ReactNod
                 </div>
               </div>
             )}
-          </div>        </header>
+          </div>
+        </header>
         <motion.main
           className={fullBleed ? "flex-1 flex flex-col min-h-0 w-full overflow-hidden" : "p-6 md:p-8 flex-1 w-full max-w-6xl mx-auto"}
           initial={{ opacity: 0, y: 12 }}

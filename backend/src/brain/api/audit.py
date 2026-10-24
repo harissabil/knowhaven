@@ -223,7 +223,7 @@ async def summary(ctx: Auditor, days: int = Query(default=7, ge=1, le=90)) -> Su
         admin = await s.scalar(
             select(func.count())
             .select_from(AuditLog)
-            .where(AuditLog.ts >= since, AuditLog.event_type == "admin")
+            .where(AuditLog.ts >= since, AuditLog.event_type != "query")
         )
     return SummaryOut(
         since=since, queries=sum(by_decision.values()), by_decision={k or "none": v for k, v in by_decision.items()},

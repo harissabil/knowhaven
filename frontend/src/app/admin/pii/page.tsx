@@ -268,13 +268,13 @@ export default function Pii() {
         <table className="w-full text-left text-sm">
           <thead className="bg-surface2 border-b border-line">
             <tr>
-              <th className="p-3">{l("Peran Bisnis", "Business Role")}</th>
+              <th className="px-4 py-3">{l("Peran Bisnis", "Business Role")}</th>
               {PII_TYPES.map((p) => (
-                <th key={p} className="p-3 text-center">
+                <th key={p} className="px-4 py-3 text-center">
                   {LABEL[p]}
                 </th>
               ))}
-              <th className="p-3 text-right">{l("Aksi Peran", "Role Actions")}</th>
+              <th className="px-4 py-3 text-right">{l("Aksi Peran", "Role Actions")}</th>
             </tr>
           </thead>
           <tbody>
@@ -283,7 +283,7 @@ export default function Pii() {
               const isConfirmingDelete = deletingRole?.id === r.id;
               return (
                 <tr key={r.id} className="border-t border-line hover:bg-surface2/40 transition-colors">
-                  <td className="p-3">
+                  <td className="px-4 py-3.5">
                     {isEditing ? (
                       <div className="flex items-center gap-1.5 max-w-xs">
                         <input
@@ -315,14 +315,16 @@ export default function Pii() {
                         </button>
                       </div>
                     ) : (
-                      <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center gap-2.5">
                         <span className="font-semibold">{r.name}</span>
-                        <span className="text-xs text-muted font-mono">{r.key}</span>
-                      </div>
+                        <span className="text-xs text-muted font-mono px-1.5 py-0.5 rounded bg-surface2 border border-line">
+                          {r.key}
+                        </span>
+                      </span>
                     )}
                   </td>
                   {PII_TYPES.map((p) => (
-                    <td key={p} className="p-3 text-center">
+                    <td key={p} className="px-4 py-3.5 text-center">
                       <input
                         type="checkbox"
                         className="w-4 h-4 accent-[var(--brand)] cursor-pointer"
@@ -332,7 +334,7 @@ export default function Pii() {
                       />
                     </td>
                   ))}
-                  <td className="p-3 text-right">
+                  <td className="px-4 py-3.5 text-right">
                     {isConfirmingDelete ? (
                       <div className="inline-flex items-center gap-1.5 text-xs">
                         <span className="text-bad font-medium flex items-center gap-1 mr-1">

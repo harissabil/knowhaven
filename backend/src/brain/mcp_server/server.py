@@ -30,6 +30,7 @@ from starlette.responses import JSONResponse
 from brain.agent.pipeline import Pipeline
 from brain.api.chat import ask
 from brain.api.mcp_tokens import EXPERT_INSTRUCTIONS
+from brain.audit import log as audit
 from brain.config import get_settings
 from brain.db.models import McpToken, Tenant, User
 from brain.db.session import global_session, tenant_session
@@ -178,7 +179,21 @@ def build_server() -> MCPServer:
         async with tenant_session(rc.tenant_id) as s:
             policy = await pii_policy(s, rc, True)
         res = await Retriever(rc, policy=policy).get_item(item_id)
-        if not res.hits:
+        found = bool(res.hits)
+        async with tenant_session(rc.tenant_id) as s:
+            await audit.append(
+                s,
+                rc.tenant_id,
+                "mcp",
+                actor_user_id=rc.user_id,
+                channel="mcp",
+                permission_version=rc.permission_version,
+                roles_snapshot=sorted(rc.role_keys),
+                retrieved_item_ids=[res.hits[0].item_id] if found else [],
+                filtered_count=res.filtered_count,
+                details={"action": "mcp.open_source", "item_id": item_id, "found": found},
+            )
+        if not found:
             return NOT_FOUND  # identical for forbidden and non-existent IDs (T24)
         h = res.hits[0]
         head = f"[{h.item_id}] {h.title or h.container} ({h.container}, {h.updated_at.date().isoformat()})"
@@ -194,6 +209,16 @@ def build_server() -> MCPServer:
             user = await s.scalar(select(User).where(User.id == rc.user_id))
         async with tenant_session(rc.tenant_id) as s:
             tenant = await s.scalar(select(Tenant))
+            await audit.append(
+                s,
+                rc.tenant_id,
+                "mcp",
+                actor_user_id=rc.user_id,
+                channel="mcp",
+                permission_version=rc.permission_version,
+                roles_snapshot=sorted(rc.role_keys),
+                details={"action": "mcp.whoami"},
+            )
         return (
             f"Nama: {user.name} ({user.email})\nPerusahaan: {tenant.name}\n"
             f"Peran: {', '.join(sorted(rc.role_keys)) or '-'}\nVersi izin: {rc.permission_version}"

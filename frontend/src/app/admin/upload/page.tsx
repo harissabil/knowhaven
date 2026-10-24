@@ -55,13 +55,13 @@ export default function UploadPage() {
 
   return (
     <Shell title={t("upload")}>
-      <div className="card p-6 flex flex-col gap-4 max-w-xl">
+      <div className="card p-6 flex flex-col gap-5 max-w-xl">
         {loadErr && (
           <p role="alert" className="text-bad text-sm">
             {l("Daftar folder tidak bisa dimuat: ", "Could not load folders: ")}{loadErr}
           </p>
         )}
-        <label className="flex flex-col gap-1.5 font-medium text-sm">
+        <label className="field">
           {l("Container tujuan", "Target container")}
           <select className="input" value={selected} onChange={(e) => setSelected(e.target.value)}>
             {containers.map((c) => (
@@ -78,12 +78,12 @@ export default function UploadPage() {
           </p>
         )}
 
-        <label className="flex flex-col gap-1.5 font-medium text-sm">
+        <label className="field">
           {l("Judul (opsional)", "Title (optional)")}
           <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} />
         </label>
 
-        <label className="flex flex-col gap-1.5 font-medium text-sm">
+        <label className="field">
           {l(
             "File dokumen (PDF, DOCX, Markdown, export WhatsApp .txt)",
             "Document file (PDF, DOCX, Markdown, WhatsApp export .txt)",
