@@ -16,6 +16,7 @@ from collections.abc import Iterable
 
 from sqlalchemy import ColumnElement, and_, exists, false, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from brain.db.models import Container, ContainerAcl, ItemAclOverride, SourceItem
 from brain.rbac.context import RequestContext
@@ -24,29 +25,40 @@ from brain.rbac.context import RequestContext
 def _override(effect: str, role_ids: list) -> ColumnElement[bool]:
     if not role_ids:
         return false()
-    return exists().where(
-        ItemAclOverride.tenant_id == SourceItem.tenant_id,
-        ItemAclOverride.item_id == SourceItem.id,
-        ItemAclOverride.effect == effect,
-        ItemAclOverride.role_id.in_(role_ids),
+    o = aliased(ItemAclOverride)
+    return (
+        exists()
+        .where(
+            o.tenant_id == SourceItem.tenant_id,
+            o.item_id == SourceItem.id,
+            o.effect == effect,
+            o.role_id.in_(role_ids),
+        )
+        .correlate(SourceItem)
     )
 
 
 def visible_item_clause(ctx: RequestContext) -> ColumnElement[bool]:
-    """WHERE clause over `SourceItem` (correlated; no join needed in the caller)."""
+    """WHERE clause over `SourceItem` (correlated; no join needed in the caller). Uses aliases and
+    explicit correlation so it composes into queries that also join containers/overrides."""
     roles = sorted(ctx.business_role_ids)
     grants = sorted(ctx.temp_grant_container_ids)
-    mapped = exists().where(
-        Container.tenant_id == SourceItem.tenant_id,
-        Container.id == SourceItem.container_id,
-        Container.mapped.is_(True),
+    c, acl_t = aliased(Container), aliased(ContainerAcl)
+    mapped = (
+        exists()
+        .where(
+            c.tenant_id == SourceItem.tenant_id, c.id == SourceItem.container_id, c.mapped.is_(True)
+        )
+        .correlate(SourceItem)
     )
     acl = (
-        exists().where(
-            ContainerAcl.tenant_id == SourceItem.tenant_id,
-            ContainerAcl.container_id == SourceItem.container_id,
-            ContainerAcl.role_id.in_(roles),
+        exists()
+        .where(
+            acl_t.tenant_id == SourceItem.tenant_id,
+            acl_t.container_id == SourceItem.container_id,
+            acl_t.role_id.in_(roles),
         )
+        .correlate(SourceItem)
         if roles
         else false()
     )

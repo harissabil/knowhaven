@@ -107,3 +107,13 @@ def mask_text(
 ) -> tuple[str, list[PiiSpan]]:
     spans = detect(text, company_domains)
     return mask(text, spans), spans
+
+
+def mask_except(
+    text: str, allowed: frozenset[str], company_domains: frozenset[str] = frozenset()
+) -> tuple[str, bool]:
+    """Raw text with only the `allowed` PII types left visible (design doc 11.4: release raw data
+    only to roles with pii_permissions for that type). Returns (text, revealed_anything)."""
+    spans = detect(text, company_domains)
+    hidden = [s for s in spans if s.type not in allowed]
+    return mask(text, hidden), len(hidden) < len(spans)
