@@ -1,0 +1,15 @@
+{
+  "users": [
+    {"id": "U1HARJO", "name": "Harjo Wibowo", "email": "harjo@klm-demo.id"},
+    {"id": "U1YOGA", "name": "Yoga Prasetyo", "email": "yoga@konsultan-demo.id"},
+    {"id": "U1WULAN", "name": "Wulan Sari", "email": "wulan@klm-demo.id"}
+  ],
+  "channels": [
+    {"id": "C1UMUM", "name": "umum", "messages": [
+      {"user": "U1HARJO", "at": "2026-09-01T07:00:00+07:00", "text": "Mulai September kedai buka jam 07.00–21.00 setiap hari ya."},
+      {"user": "U1WULAN", "at": "2026-09-20T15:00:00+07:00", "text": "Harga biji arabika Merapi dari petani naik jadi Rp180.000/kg, stok aman sampai akhir bulan"},
+      {"user": "U1HARJO", "at": "2026-10-05T09:00:00+07:00", "text": "Proyek Kenanga (renovasi kedai Kaliurang) mulai 1 November, kedai Kaliurang tutup 2 minggu."},
+      {"user": "U1YOGA", "at": "2026-10-06T10:00:00+07:00", "text": "Sistem kasir baru sudah live, kalau ada error lapor di Jira KLM ya"}
+    ]}
+  ]
+}
