@@ -5,7 +5,7 @@ Runs as the Neon owner role over the direct (unpooled) URL:
 - creates the runtime role brain_app: NOSUPERUSER, NOBYPASSRLS, not a table owner,
   so Row-Level Security always applies to it
 - grants it DML on tables the owner creates later (migrations)
-- writes APP_DATABASE_URL (pooled host, brain_app credentials) into .env
+- writes APP_DB_PASSWORD into .env (the runtime URL is derived from DATABASE_URL)
 
 Usage: uv run brain-db-bootstrap [--rotate-password]
 """
@@ -50,7 +50,7 @@ async def bootstrap(rotate_password: bool) -> None:
         exists = await conn.scalar(
             text("SELECT 1 FROM pg_roles WHERE rolname = :r"), {"r": APP_ROLE}
         )
-        if not exists or rotate_password or not s.app_database_url:
+        if not exists or rotate_password or not s.app_db_password:
             # Neon requires >= 60 bits of entropy for SQL-created role passwords.
             password = secrets.token_urlsafe(32)
             verb = "ALTER" if exists else "CREATE"
@@ -86,9 +86,8 @@ async def bootstrap(rotate_password: bool) -> None:
     await engine.dispose()
 
     if password:
-        app_url = make_url(s.database_url).set(username=APP_ROLE, password=password)
-        _set_env_var("APP_DATABASE_URL", app_url.render_as_string(hide_password=False))
-        print(f"{APP_ROLE} password set; APP_DATABASE_URL written to {ENV_FILE}")
+        _set_env_var("APP_DB_PASSWORD", password)
+        print(f"{APP_ROLE} password set; APP_DB_PASSWORD written to {ENV_FILE}")
     print("bootstrap ok")
 
 

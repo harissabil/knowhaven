@@ -6,15 +6,13 @@ from sqlalchemy import text
 
 from brain import storage
 from brain.config import get_settings
-from brain.db.engine import create_engine
+from brain.db.session import get_engine
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    settings = get_settings()
-    app.state.engine = create_engine(settings.app_database_url)
     yield
-    await app.state.engine.dispose()
+    await get_engine().dispose()
 
 
 def create_app() -> FastAPI:
@@ -30,7 +28,7 @@ def create_app() -> FastAPI:
 
     @app.get("/healthz")
     async def healthz() -> dict:
-        async with app.state.engine.connect() as conn:
+        async with get_engine().connect() as conn:
             await conn.execute(text("SELECT 1"))
         await storage.check()
         return {"status": "ok", "db": "ok", "storage": "ok"}

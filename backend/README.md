@@ -9,15 +9,16 @@ Prereqs: uv, Node (for the Neon CLI and `neon.ts`), `neon login` done once.
 
 ```sh
 npm install                   # @neon/config for neon.ts
-neon deploy                   # provision services in neon.ts, pull DATABASE_URL* + AWS_* into .env
+neon checkout dev             # develop on the long-lived dev branch; pulls DATABASE_URL* + AWS_* into .env
 uv sync
-uv run brain-db-bootstrap     # extensions + brain_app runtime role, writes APP_DATABASE_URL
+uv run brain-db-bootstrap     # extensions + brain_app runtime role, writes APP_DB_PASSWORD (once per project)
+uv run alembic upgrade head   # schema + RLS, runs as the Neon owner over the direct URL
 uv run brain                  # API on http://localhost:8000 (docs at /docs, health at /healthz)
 ```
 
 ```sh
 uv run ruff check src tests && uv run ruff format src tests
-uv run pytest                 # tests/test_infra.py hits the linked Neon branch
+uv run pytest                 # infra + RLS isolation tests against the linked Neon branch (use dev)
 ```
 
 - The API connects as `brain_app` over the pooled URL (non-owner, NOBYPASSRLS, so RLS always applies).

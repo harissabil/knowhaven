@@ -1,6 +1,7 @@
 from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy.engine import make_url
 
 
 class Settings(BaseSettings):
@@ -12,8 +13,23 @@ class Settings(BaseSettings):
     # Pooled URL is not used by the app; unpooled URL runs migrations and bootstrap.
     database_url: str = ""
     database_url_unpooled: str = ""
-    # Ours (written by `brain-db-bootstrap`): pooled, brain_app role, RLS enforced.
-    app_database_url: str = ""
+    # Runtime role brain_app (RLS enforced). Password written by `brain-db-bootstrap`; the URL is
+    # derived from the pooled DATABASE_URL so it follows `neon checkout <branch>`.
+    app_db_user: str = "brain_app"
+    app_db_password: str = ""
+    app_database_url_override: str = ""
+
+    @property
+    def app_database_url(self) -> str:
+        if self.app_database_url_override:
+            return self.app_database_url_override
+        if not (self.database_url and self.app_db_password):
+            return ""
+        return (
+            make_url(self.database_url)
+            .set(username=self.app_db_user, password=self.app_db_password)
+            .render_as_string(hide_password=False)
+        )
 
     session_secret: str = "change-me"
     credentials_key: str = ""
