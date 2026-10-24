@@ -117,7 +117,8 @@ class Tenant(Base):
     id: Mapped[uuid.UUID] = _uuid_pk()
     name: Mapped[str] = mapped_column(Text)
     slug: Mapped[str] = mapped_column(Text, unique=True)
-    join_code_hash: Mapped[str | None] = mapped_column(Text, unique=True)
+    join_code_hash: Mapped[str | None] = mapped_column(Text, unique=True)  # lookup
+    join_code_encrypted: Mapped[bytes | None] = mapped_column(LargeBinary)  # admin can view it
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
     )

@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 from brain import storage
+from brain.api import router as api_router
 from brain.config import get_settings
 from brain.db.session import get_engine
 
@@ -25,6 +26,8 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    app.include_router(api_router)
 
     @app.get("/healthz")
     async def healthz() -> dict:
