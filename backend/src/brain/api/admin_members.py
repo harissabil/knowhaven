@@ -229,3 +229,32 @@ async def list_roles(ctx: Admin) -> list[RoleOut]:
     async with tenant_session(ctx.tenant_id) as s:
         roles = (await s.scalars(select(Role).order_by(Role.is_system.desc(), Role.name))).all()
     return [RoleOut(id=str(r.id), key=r.key, name=r.name, is_system=r.is_system) for r in roles]
+
+
+class TenantSettingsIn(BaseModel):
+    name: str | None = Field(default=None, min_length=2, max_length=120)
+    default_contact: str | None = Field(default=None, min_length=1, max_length=200)
+
+
+class TenantSettingsOut(BaseModel):
+    name: str
+    slug: str
+    default_contact: str | None
+
+
+@router.get("/tenant")
+async def get_tenant_settings(ctx: Admin) -> TenantSettingsOut:
+    async with tenant_session(ctx.tenant_id) as s:
+        t = await s.scalar(select(Tenant))
+    return TenantSettingsOut(name=t.name, slug=t.slug, default_contact=t.default_contact)
+
+
+@router.patch("/tenant")
+async def update_tenant_settings(body: TenantSettingsIn, ctx: Admin) -> TenantSettingsOut:
+    changes = body.model_dump(exclude_unset=True)
+    async with tenant_session(ctx.tenant_id) as s:
+        t = await s.scalar(select(Tenant))
+        for k, v in changes.items():
+            setattr(t, k, v)
+        await audit.admin_event(s, ctx, "tenant.update", fields=sorted(changes))
+    return TenantSettingsOut(name=t.name, slug=t.slug, default_contact=t.default_contact)

@@ -1,3 +1,5 @@
+import hashlib
+import math
 import uuid
 
 import httpx
@@ -87,3 +89,22 @@ async def make_user():
     yield _make
     for c in clients:
         await c.aclose()
+
+
+class FakeEmbedder:
+    """Deterministic 768-dim unit vectors from a hash: no API cost, stable across runs."""
+
+    model = "fake-embed"
+    dim = 768
+
+    async def embed_documents(self, texts):
+        out = []
+        for t in texts:
+            h = hashlib.sha256(t.encode()).digest()
+            v = [(h[i % 32] - 128) / 128 for i in range(self.dim)]
+            n = math.sqrt(sum(x * x for x in v))
+            out.append([x / n for x in v])
+        return out
+
+    async def embed_query(self, text):
+        return (await self.embed_documents([text]))[0]

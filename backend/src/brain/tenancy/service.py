@@ -78,10 +78,12 @@ async def _set_join_code(s: AsyncSession, tenant_id: uuid.UUID) -> str:
 
 
 async def create_tenant(
-    s: AsyncSession, tenant_id: uuid.UUID, name: str, creator_id: uuid.UUID
+    s: AsyncSession, tenant_id: uuid.UUID, name: str, creator_id: uuid.UUID, slug: str | None = None
 ) -> str:
     """Creates tenant + roles + creator as Owner+Admin. Returns the join code."""
-    s.add(Tenant(id=tenant_id, name=name.strip(), slug=slugify(name), created_by=creator_id))
+    s.add(
+        Tenant(id=tenant_id, name=name.strip(), slug=slug or slugify(name), created_by=creator_id)
+    )
     await s.flush()
     s.add(PermissionState(tenant_id=tenant_id))
     s.add(Membership(tenant_id=tenant_id, user_id=creator_id, status="active"))

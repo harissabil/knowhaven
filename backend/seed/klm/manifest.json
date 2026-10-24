@@ -1,0 +1,30 @@
+{
+  "tenant": {"name": "CV Kopi Lereng Merapi", "slug": "klm", "owner": "harjo@klm-demo.id"},
+  "extra_roles": [],
+  "users": [
+    {"email": "harjo@klm-demo.id", "name": "Harjo Wibowo", "password": "Demo-KLM-2026!", "roles": ["owner", "admin", "direksi"],
+     "department": "Pemilik", "title": "Pemilik", "branch": "Sleman", "slack": "U1HARJO"},
+    {"email": "yoga@konsultan-demo.id", "name": "Yoga Prasetyo", "password": "Demo-Konsultan-2026!", "roles": ["admin", "staff"],
+     "department": "IT", "title": "Konsultan Sistem (eksternal)", "branch": "Sleman", "slack": "U1YOGA"},
+    {"email": "wulan@klm-demo.id", "name": "Wulan Sari", "password": "Demo-KLM-2026!", "roles": ["staff"],
+     "department": "Kedai", "title": "Kepala Barista", "branch": "Sleman", "slack": "U1WULAN"}
+  ],
+  "containers": [
+    {"key": "umum", "source": "slack_channel", "external_id": "C1UMUM", "name": "umum", "tier": "open", "roles": "ALL"},
+    {"key": "sop-kedai", "source": "upload_folder", "external_id": "sop-kedai", "name": "SOP Kedai", "tier": "open", "roles": "ALL"},
+    {"key": "jira-klm", "source": "jira_project", "external_id": "KLM", "name": "Kedai", "tier": "open", "roles": "ALL"}
+  ],
+  "topics": [
+    {"key": "operasional_kedai", "display_name": "Operasional kedai", "owner": "harjo@klm-demo.id", "tier": "open",
+     "aliases": ["kedai", "jam buka", "barista"], "fallback_contact": "Pak Harjo (harjo@klm-demo.id)"}
+  ],
+  "managers": [],
+  "default_contact": "Pak Harjo (harjo@klm-demo.id)",
+  "documents": [
+    {"file": "uploads/sop-kedai/sop-penyeduhan.md", "container": "sop-kedai", "source": "upload", "id": "sop-penyeduhan",
+     "version": 1, "updated_at": "2026-07-01T10:00:00+07:00"}
+  ],
+  "whatsapp": [],
+  "slack": "slack.json",
+  "jira": "jira.json"
+}

@@ -1,0 +1,14 @@
+{
+  "site_url": "https://klm-demo.atlassian.net",
+  "projects": {"KLM": "Kedai"},
+  "issues": [
+    {"key": "KLM-3", "summary": "Proyek Kenanga: renovasi kedai Kaliurang", "status": "In Progress", "category": "indeterminate",
+     "assignee": "Harjo Wibowo", "reporter": "Harjo Wibowo", "priority": "High", "due": "2026-11-15",
+     "created": "2026-10-05T09:10:00+0700", "updated": "2026-10-12T10:00:00+0700",
+     "description": "Renovasi area barista dan tambah 10 kursi. Anggaran Rp85 juta."},
+    {"key": "KLM-4", "summary": "Error cetak struk di kasir baru", "status": "Open", "category": "new",
+     "assignee": "Yoga Prasetyo", "reporter": "Wulan Sari", "priority": "Medium", "due": "2026-10-28",
+     "created": "2026-10-07T12:00:00+0700", "updated": "2026-10-07T12:00:00+0700",
+     "description": "Printer struk kadang tidak mencetak nomor antrian."}
+  ]
+}

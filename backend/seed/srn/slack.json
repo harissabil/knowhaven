@@ -1,0 +1,54 @@
+{
+  "_format": "Compact authoring format. brain-seed converts each message to a Slack export message (ts from `at`) and runs it through the Slack connector. `reply_to` = index of the parent message in the same channel (thread).",
+  "users": [
+    {"id": "U0SRNADMIN", "name": "Admin SRN", "email": "admin@srn-demo.id"},
+    {"id": "U0DIMAS", "name": "Dimas Pratama", "email": "dimas@srn-demo.id"},
+    {"id": "U0RINA", "name": "Rina Wulandari", "email": "rina@srn-demo.id"},
+    {"id": "U0ANDI", "name": "Andi Saputra", "email": "andi@srn-demo.id"},
+    {"id": "U0SARI", "name": "Sari Kusuma", "email": "sari@srn-demo.id"},
+    {"id": "U0BUDIH", "name": "Budi Hartono", "email": "budi.hartono@srn-demo.id"},
+    {"id": "U0BUDIS", "name": "Budi Santoso", "email": "budi.santoso@srn-demo.id"},
+    {"id": "U0LINA", "name": "Lina Marpaung", "email": "lina@srn-demo.id"},
+    {"id": "U0YOGA", "name": "Yoga Prasetyo", "email": "yoga@konsultan-demo.id"},
+    {"id": "U0TONO", "name": "Tono (gudang)", "email": "tono.gudang@gmail.com"}
+  ],
+  "channels": [
+    {"id": "C0PENGHR", "name": "pengumuman-hr", "messages": [
+      {"user": "U0SARI", "at": "2026-08-04T09:00:00+07:00", "text": "Selamat datang untuk karyawan baru batch Agustus 2026! 🙌 Paket onboarding (jadwal minggu pertama, kebijakan cuti, cara klaim reimbursement) ada di folder *Paket Onboarding*. Kalau ada pertanyaan, japri HR ya."},
+      {"user": "U0SARI", "at": "2026-09-02T09:30:00+07:00", "text": "📢 *Pengumuman HR*: mulai 1 September 2026, uang bensin (tunjangan transport) karyawan naik dari Rp500.000 menjadi *Rp750.000 per bulan*. Klaim tetap lewat form reimbursement dengan struk asli. SOP Reimbursement di Confluence akan diperbarui menyusul. — HR"},
+      {"user": "U0DIMAS", "at": "2026-09-02T09:41:00+07:00", "reply_to": 1, "text": "Mantap bu! Ini berlaku juga utk karyawan yg masih probation?"},
+      {"user": "U0SARI", "at": "2026-09-02T09:55:00+07:00", "reply_to": 1, "text": "Berlaku untuk semua karyawan aktif termasuk masa probation, dihitung prorata sejak tanggal bergabung."},
+      {"user": "U0SARI", "at": "2026-09-15T08:00:00+07:00", "text": "Reminder: batas pengajuan klaim reimbursement bulan Agustus adalah tanggal 20 September 2026 ya."},
+      {"user": "U0SARI", "at": "2026-10-01T10:00:00+07:00", "text": "Info lembur: mulai Oktober 2026 uang makan lembur menjadi Rp40.000 per hari lembur (minimal 3 jam). — HR"}
+    ]},
+    {"id": "C0GENERAL", "name": "general", "messages": [
+      {"user": "U0SRNADMIN", "at": "2026-08-01T08:00:00+07:00", "text": "Halo semua, ini channel umum SRN. Pengumuman resmi HR ada di #pengumuman-hr ya."},
+      {"user": "U0RINA", "at": "2026-09-10T13:05:00+07:00", "text": "guys meeting ops nasional jam 2 ya, don't be late 🙏 link zoom di calendar"},
+      {"user": "U0DIMAS", "at": "2026-09-12T12:01:00+07:00", "text": "ada yg tau printer lt 3 knp ga bs dipake? 😅"},
+      {"user": "U0YOGA", "at": "2026-09-12T12:10:00+07:00", "reply_to": 2, "text": "lagi diganti tonernya mas, coba yg di lt 2 dulu"},
+      {"user": "U0BUDIS", "at": "2026-09-25T16:20:00+07:00", "text": "eh katanya uang bensin mau naik lagi jadi 1 juta ya? 😂 ada yg denger?"},
+      {"user": "U0DIMAS", "at": "2026-09-25T16:24:00+07:00", "reply_to": 4, "text": "wkwk blm denger sih, yg terakhir kan 750rb"},
+      {"user": "U0LINA", "at": "2026-10-06T09:00:00+07:00", "text": "Reminder audit internal kuartal 3 mulai 20 Okt. Mohon dokumen pendukung klaim disiapkan."}
+    ]},
+    {"id": "C0OPSNAS", "name": "ops-nasional", "messages": [
+      {"user": "U0BUDIH", "at": "2026-09-30T10:00:00+07:00", "text": "Rekap Q3: on-time delivery nasional 92%, Makassar paling rendah (78%) karena jadwal kapal. Q4 fokus perbaikan rute timur."},
+      {"user": "U0RINA", "at": "2026-10-14T11:00:00+07:00", "text": "FYI tim, cabang Makassar lagi ada keterlambatan stok minyak goreng & gula, detail di #ops-makassar"}
+    ]},
+    {"id": "C0OPSMKS", "name": "ops-makassar", "messages": [
+      {"user": "U0RINA", "at": "2026-10-14T08:15:00+07:00", "text": "Pak, stok minyak goreng & gula utk Makassar telat lagi 😩 kapal dari Surabaya ketahan krn cuaca buruk di Selat Makassar, ETA mundur 3 hari"},
+      {"user": "U0BUDIH", "at": "2026-10-14T08:40:00+07:00", "text": "Noted Rin. Sesuai SOP distribusi, kalau telat > 2 hari wajib eskalasi ke pusat & buat tiket. Tolong bikin di Jira ya"},
+      {"user": "U0RINA", "at": "2026-10-14T09:05:00+07:00", "text": "Sudah pak, OPS-118. ETA kapal skrg 17 Okt"},
+      {"user": "U0RINA", "at": "2026-10-16T14:30:00+07:00", "text": "Update: 2 toko besar (Toko Sumber Rejeki & UD Maju) komplain krn stok kosong. Saya buat OPS-121 utk koordinasi komplain"},
+      {"user": "U0BUDIH", "at": "2026-10-16T15:00:00+07:00", "text": "Ok. Coba cek opsi kirim jalur darat dari gudang Parepare sbg backup, catat di OPS-125"},
+      {"user": "U0RINA", "at": "2026-10-18T10:20:00+07:00", "text": "Kapal sudah sandar pagi ini, bongkar muat selesai sore. Tapi OPS-121 & OPS-125 masih open ya pak, komplain toko blm closed"}
+    ]},
+    {"id": "C0KENARI", "name": "proyek-kenari", "messages": [
+      {"user": "U0ANDI", "at": "2026-09-28T09:00:00+07:00", "text": "Kickoff *Proyek Kenari* minggu depan. Reminder: proyek ini confidential, jangan dibahas di channel lain atau ke tim cabang."},
+      {"user": "U0ANDI", "at": "2026-10-08T15:00:00+07:00", "text": "Update Kenari: due diligence calon distributor di Manado jalan, target signing Q1 2027. Budget sementara Rp4,2 M."}
+    ]},
+    {"id": "C0HRINT", "name": "hr-internal", "messages": [
+      {"user": "U0SARI", "at": "2026-08-05T10:00:00+07:00", "text": "Data pendaftaran BPJS karyawan baru: Dimas Pratama, NIK 3171041508990003, HP 0812-3344-5566, rek BCA 5271234567 a.n. Dimas Pratama"},
+      {"user": "U0SARI", "at": "2026-10-09T16:00:00+07:00", "text": "Draft rencana restrukturisasi tim cabang timur masih dibahas direksi, jangan disebar dulu."}
+    ]}
+  ]
+}

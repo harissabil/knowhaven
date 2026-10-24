@@ -31,6 +31,7 @@ dependencies = [
 [project.scripts]
 brain = "brain:main"
 brain-db-bootstrap = "brain.db.bootstrap:main"
+brain-seed = "brain.seed:main"
 
 [build-system]
 requires = ["uv_build>=0.8.22,<0.9.0"]
@@ -60,3 +61,5 @@ markers = ["live: calls the real Gemini API (skip with -m 'not live')"]
 
 [tool.ruff.lint.per-file-ignores]
 "migrations/versions/*" = ["E501"]
+"tests/*" = ["E501"]  # fixtures are clearer on one line
+"src/brain/seed.py" = ["E501"]

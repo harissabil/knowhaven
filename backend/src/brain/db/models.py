@@ -119,6 +119,8 @@ class Tenant(Base):
     slug: Mapped[str] = mapped_column(Text, unique=True)
     join_code_hash: Mapped[str | None] = mapped_column(Text, unique=True)  # lookup
     join_code_encrypted: Mapped[bytes | None] = mapped_column(LargeBinary)  # admin can view it
+    # "Tidak tahu" fallback contact for unknown/hidden topics (11.1), e.g. "HR Helpdesk (hr@...)"
+    default_contact: Mapped[str | None] = mapped_column(Text)
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
     )

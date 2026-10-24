@@ -59,3 +59,20 @@ def presigned_get_url(key: str, expires_in: int = 300) -> str:
 
 async def check() -> None:
     await asyncio.to_thread(_client().head_bucket, Bucket=get_settings().storage_bucket)
+
+
+def _delete_prefix_sync(prefix: str) -> int:
+    client, bucket, n = _client(), get_settings().storage_bucket, 0
+    for page in client.get_paginator("list_objects_v2").paginate(Bucket=bucket, Prefix=prefix):
+        keys = [{"Key": o["Key"]} for o in page.get("Contents", [])]
+        if keys:
+            client.delete_objects(Bucket=bucket, Delete={"Objects": keys, "Quiet": True})
+            n += len(keys)
+    return n
+
+
+async def delete_prefix(prefix: str) -> int:
+    """Delete every object under `prefix` (used by the seed reset). Returns the count."""
+    if not prefix.startswith("tenants/") or prefix.count("/") < 2:
+        raise ValueError("refusing to delete outside a single tenant prefix")
+    return await asyncio.to_thread(_delete_prefix_sync, prefix)
