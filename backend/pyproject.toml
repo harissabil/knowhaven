@@ -34,6 +34,7 @@ brain-db-bootstrap = "brain.db.bootstrap:main"
 brain-seed = "brain.seed:main"
 brain-mcp = "brain.mcp_server.server:main"
 brain-mcp-token = "brain.mcp_server.token_cli:main"
+brain-worker = "brain.worker:main"
 
 [build-system]
 requires = ["uv_build>=0.8.22,<0.9.0"]
@@ -70,6 +71,8 @@ markers = ["live: calls the real Gemini API (skip with -m 'not live')"]
 "src/brain/api/chat.py" = ["E501"]
 "src/brain/api/documents.py" = ["E501"]
 "src/brain/api/uploads.py" = ["E501"]
+"src/brain/api/integrations.py" = ["E501"]
+"src/brain/integrations/*" = ["E501"]
 "src/brain/api/audit.py" = ["E501"]
 "src/brain/mcp_server/*" = ["E501"]
 "src/brain/api/mcp_tokens.py" = ["E501"]  # user-facing instruction text

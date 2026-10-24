@@ -6,8 +6,9 @@ services:
       - "80:80"
       - "443:443"
     environment:
-      - DOMAIN=${DOMAIN:-localhost}
-      - ACME_EMAIL=${ACME_EMAIL:-admin@example.com}
+      # Public host name, e.g. a sslip.io name: Caddy then gets a Let's Encrypt certificate and
+      # redirects HTTP to HTTPS. Unset = plain HTTP on :80. Lives in the root .env, not the repo.
+      - SITE_ADDRESS=${SITE_ADDRESS:-:80}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
@@ -51,6 +52,18 @@ services:
       - ./backend/gcp-sa.json:/app/gcp-sa.json:ro
     expose:
       - "8001"
+
+  # Polls Confluence/Jira for every connected tenant (Slack pushes events to the api instead).
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: ["brain-worker"]
+    env_file:
+      - ./backend/.env
+    volumes:
+      - ./backend/gcp-sa.json:/app/gcp-sa.json:ro
 
   web:
     build:

@@ -208,3 +208,21 @@ export interface DocumentOut {
 }
 
 export interface TenantSettingsOut { name: string; slug: string; default_contact: string | null; profile: string | null }
+
+/** GET /api/admin/integrations */
+export interface IntegrationOut {
+  type: "slack" | "confluence" | "jira" | string;
+  status: "active" | "error" | "disconnected" | string;
+  workspace: string;
+  meta: Record<string, unknown>;
+  last_sync_at: string | null;
+  last_error: string | null;
+  connected_at: string;
+}
+export interface IntegrationsOut {
+  slack_available: boolean;
+  slack_redirect_url: string;
+  slack_events_url: string;
+  integrations: IntegrationOut[];
+}
+export interface SlackUserOut { slack_user_id: string; name: string; email: string | null; member_user_id: string | null }

@@ -1,4 +1,5 @@
-:80 {
+# SITE_ADDRESS comes from the environment (root .env): a host name enables automatic HTTPS.
+{$SITE_ADDRESS::80} {
     handle /healthz {
         reverse_proxy api:8000
     }

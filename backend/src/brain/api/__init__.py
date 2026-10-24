@@ -8,6 +8,7 @@ from brain.api import (
     auth,
     chat,
     documents,
+    integrations,
     mcp_tokens,
     tenants,
     uploads,
@@ -21,6 +22,7 @@ router.include_router(admin_members.router)
 router.include_router(admin_rbac.router)
 router.include_router(uploads.router)
 router.include_router(documents.router)
+router.include_router(integrations.router)
 router.include_router(chat.router)
 router.include_router(audit.router)
 router.include_router(mcp_tokens.router)
