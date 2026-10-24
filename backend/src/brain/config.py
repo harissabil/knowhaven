@@ -49,8 +49,14 @@ class Settings(BaseSettings):
     llm_model_flash: str = "gemini-3.7-flash"
     llm_flash_thinking_level: str = "low"
     llm_compose_hedge_after_s: float = 8.0
+    # Per-call budgets (seconds) and a global cap on concurrent model calls (quota safety).
+    llm_timeout_lite_s: float = 15.0
+    llm_timeout_flash_s: float = 30.0
+    llm_stream_timeout_s: float = 45.0
+    llm_max_concurrency: int = 8
     embedding_model: str = "gemini-embedding-001"
     embedding_dim: int = 768
+    embedding_batch_size: int = 32
 
     slack_client_id: str = ""
     slack_client_secret: str = ""
