@@ -1,0 +1,57 @@
+version: "3.8"
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - DOMAIN=${DOMAIN:-localhost}
+      - ACME_EMAIL=${ACME_EMAIL:-admin@example.com}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+      mcp:
+        condition: service_started
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: ["uvicorn", "brain.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    env_file:
+      - ./backend/.env
+    volumes:
+      - ./backend/gcp-sa.json:/app/gcp-sa.json:ro
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  mcp:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: ["brain-mcp", "--host", "0.0.0.0", "--port", "8001"]
+    env_file:
+      - ./backend/.env
+    volumes:
+      - ./backend/gcp-sa.json:/app/gcp-sa.json:ro
+    expose:
+      - "8001"
+
+volumes:
+  caddy_data:
+  caddy_config:

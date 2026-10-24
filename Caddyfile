@@ -1,0 +1,25 @@
+:80 {
+    handle /healthz {
+        reverse_proxy api:8000
+    }
+
+    handle /api/* {
+        reverse_proxy api:8000
+    }
+
+    handle /docs* {
+        reverse_proxy api:8000
+    }
+
+    handle /openapi.json {
+        reverse_proxy api:8000
+    }
+
+    handle /mcp* {
+        reverse_proxy mcp:8001
+    }
+
+    handle {
+        respond "Workplace Brain API Gateway" 200
+    }
+}

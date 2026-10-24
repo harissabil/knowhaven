@@ -102,6 +102,41 @@ async def reject(
     return req
 
 
+async def get_access_request(
+    s: AsyncSession, ctx: RequestContext, request_id: uuid.UUID
+) -> AccessRequest:
+    req = await s.scalar(select(AccessRequest).where(AccessRequest.id == request_id))
+    if req is None:
+        raise HitlError("request_not_found")
+    if req.requester_id == ctx.user_id:
+        return req
+    if ctx.user_id in await approvers.for_access(
+        s, req.topic_key, req.container_id, req.requester_id
+    ):
+        return req
+    raise HitlError("request_not_found")
+
+
+async def list_access_requests(
+    s: AsyncSession, ctx: RequestContext, mine: bool = False, status: str | None = None
+) -> list[AccessRequest]:
+    q = select(AccessRequest).order_by(AccessRequest.created_at.desc())
+    if status:
+        q = q.where(AccessRequest.status == status)
+    if mine:
+        q = q.where(AccessRequest.requester_id == ctx.user_id)
+        return list((await s.scalars(q)).all())
+
+    all_reqs = (await s.scalars(q)).all()
+    visible = []
+    for req in all_reqs:
+        if req.requester_id != ctx.user_id and ctx.user_id in await approvers.for_access(
+            s, req.topic_key, req.container_id, req.requester_id
+        ):
+            visible.append(req)
+    return visible
+
+
 async def expire_grants(s: AsyncSession, tenant_id: uuid.UUID) -> int:
     """Mark approved requests whose grant ran out as expired and bump the permission version so
     open conversations recompute (8.5). Grants are already ignored after expires_at."""

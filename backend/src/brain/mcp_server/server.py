@@ -215,3 +215,7 @@ def main() -> None:
     p.add_argument("--port", type=int, default=8001)
     args = p.parse_args()
     uvicorn.run(create_app(), host=args.host, port=args.port)
+
+
+if __name__ == "__main__":
+    main()
