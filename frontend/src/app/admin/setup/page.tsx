@@ -1,4 +1,5 @@
 "use client";
+import { copyText } from "@/lib/clipboard";
 import { useEffect, useState } from "react";
 import { AnimatePresence, LayoutGroup, motion } from "framer-motion";
 import { Building2, Check, Copy, FileText, FlaskConical, Lock, Plug, Send, Sparkles, UserCog, Users, X } from "lucide-react";
@@ -158,7 +159,7 @@ export default function Setup() {
                     <span className="font-medium">{l("Kode perusahaan", "Company code")}</span>
                     <div className="mt-1.5 flex items-center gap-2">
                       <code className="input !w-auto text-lg tracking-widest">{code}</code>
-                      <button className="btn" onClick={async () => { try { await navigator.clipboard.writeText(code); } catch { /* blocked */ } toast(l("Kode disalin", "Code copied")); }}><Copy size={14} /> {l("Salin", "Copy")}</button>
+                      <button className="btn" onClick={async () => { toast((await copyText(code)) ? l("Kode disalin", "Code copied") : l("Gagal menyalin. Salin manual ya.", "Could not copy. Please copy it manually.")); }}><Copy size={14} /> {l("Salin", "Copy")}</button>
                     </div>
                     <p className="text-sm text-muted mt-1.5">{l("Anggota yang memakai kode ini berstatus Pending sampai Anda menyetujui.", "Members who use this code stay Pending until you approve them.")}</p>
                   </div>
