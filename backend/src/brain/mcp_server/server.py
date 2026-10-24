@@ -19,8 +19,10 @@ import time
 import uuid
 from collections import defaultdict, deque
 from dataclasses import dataclass
+from urllib.parse import urlsplit
 
 from mcp.server.mcpserver import Context, MCPServer
+from mcp.server.transport_security import TransportSecuritySettings
 from sqlalchemy import func, select, text, update
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -201,9 +203,27 @@ def build_server() -> MCPServer:
     return mcp
 
 
+def transport_security() -> TransportSecuritySettings:
+    """DNS-rebinding protection stays on, but the public host from MCP_PUBLIC_URL must be allowed:
+    behind the reverse proxy requests arrive with that Host header, and the SDK default (localhost
+    only) answers them with 421 Misdirected Request."""
+    hosts = ["127.0.0.1:*", "localhost:*", "[::1]:*"]
+    origins = ["http://127.0.0.1:*", "http://localhost:*", "http://[::1]:*"]
+    public = urlsplit(get_settings().mcp_public_url)
+    if public.hostname:
+        name = f"[{public.hostname}]" if ":" in public.hostname else public.hostname
+        hosts += [name, f"{name}:*"]
+        origins += [f"{public.scheme}://{name}", f"{public.scheme}://{name}:*"]
+    return TransportSecuritySettings(allowed_hosts=hosts, allowed_origins=origins)
+
+
 def create_app():
     return BearerAuth(
-        build_server().streamable_http_app(streamable_http_path="/mcp", stateless_http=True)
+        build_server().streamable_http_app(
+            streamable_http_path="/mcp",
+            stateless_http=True,
+            transport_security=transport_security(),
+        )
     )
 
 

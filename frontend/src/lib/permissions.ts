@@ -3,7 +3,7 @@ export type Role =
   | "staff" | "new_hire" | "ops" | "project_mgr" | "pending" | (string & {});
 
 export type Cap =
-  | "chat" | "admin" | "upload" | "approve" | "audit" | "tests" | "pii" | "request_access";
+  | "chat" | "admin" | "upload" | "approve" | "audit" | "pii" | "request_access";
 
 const has = (roles: Role[], ...r: Role[]) => r.some((x) => roles.includes(x));
 
@@ -24,8 +24,6 @@ export function can(roles: Role[], cap: Cap, canApprove = false): boolean {
       return canApprove;
     case "audit":
       return has(roles, "auditor");
-    case "tests":
-      return has(roles, "owner", "admin", "auditor");
     case "pii":
       return has(roles, "hr");
   }
@@ -34,6 +32,7 @@ export function can(roles: Role[], cap: Cap, canApprove = false): boolean {
 export interface NavItem { href: string; id: string; cap?: Cap }
 export const NAV: NavItem[] = [
   { href: "/chat", id: "chat", cap: "chat" },
+  { href: "/documents", id: "documents", cap: "chat" },
   { href: "/approvals", id: "approvals", cap: "approve" },
   { href: "/admin/members", id: "members", cap: "admin" },
   { href: "/admin/containers", id: "containers", cap: "admin" },
@@ -44,7 +43,6 @@ export const NAV: NavItem[] = [
   { href: "/admin/pii", id: "pii", cap: "admin" },
   { href: "/admin/upload", id: "upload", cap: "upload" },
   { href: "/audit", id: "audit", cap: "audit" },
-  { href: "/tests", id: "tests", cap: "tests" },
   { href: "/settings", id: "settings" },
   { href: "/settings/workbuddy", id: "workbuddy", cap: "chat" },
 ];

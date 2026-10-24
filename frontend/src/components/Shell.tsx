@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { MessageSquare, CheckSquare, Users, Shield, Plug, Upload, ScrollText, FlaskConical, KeyRound, LogOut, Settings } from "lucide-react";
+import { MessageSquare, CheckSquare, Users, Shield, Plug, Upload, ScrollText, FlaskConical, KeyRound, LogOut, Settings, FolderOpen } from "lucide-react";
 import { useSession, usePersona, useTenants } from "@/store/session";
 import { can, NAV } from "@/lib/permissions";
 import { motion } from "framer-motion";
@@ -14,7 +14,7 @@ const ICON: Record<string, React.ReactNode> = {
   chat: <MessageSquare size={18} />, approvals: <CheckSquare size={18} />, members: <Users size={18} />,
   containers: <Shield size={18} />, integrations: <Plug size={18} />, upload: <Upload size={18} />,
   audit: <ScrollText size={18} />, tests: <FlaskConical size={18} />, workbuddy: <KeyRound size={18} />,
-  settings: <Settings size={18} />,
+  settings: <Settings size={18} />, documents: <FolderOpen size={18} />,
 };
 
 export function Shell({ children, title, fullBleed }: { children: React.ReactNode; title?: string; fullBleed?: boolean }) {

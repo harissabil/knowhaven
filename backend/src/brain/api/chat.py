@@ -13,10 +13,10 @@ from sqlalchemy import select
 from brain import storage
 from brain.agent.pipeline import Event, Pipeline
 from brain.api.deps import Member
-from brain.db.models import Conversation, Message, SourceItem
+from brain.db.models import AuditLog, Container, Conversation, Message, PiiPermission, SourceItem
 from brain.db.session import tenant_session
-from brain.rbac.visibility import visible_item_clause
-from brain.retrieval.tools import Retriever
+from brain.rbac.visibility import filter_visible_ids, visible_item_clause
+from brain.retrieval.tools import COMPANY_PROFILE_ID, Retriever
 
 router = APIRouter(tags=["chat"])
 
@@ -86,6 +86,14 @@ class ConversationOut(BaseModel):
     created_at: datetime
 
 
+class CitationOut(BaseModel):
+    id: str
+    type: str
+    title: str
+    container: str
+    date: str | None
+
+
 class MessageOut(BaseModel):
     role: str
     content: str
@@ -93,6 +101,9 @@ class MessageOut(BaseModel):
     created_at: datetime
     query_id: str | None
     stale: bool  # written under an older permission version: not reused as context (10.5)
+    # Re-checked on every load: a source the user can no longer see is simply left out.
+    sources: list[CitationOut] = []
+    decision_path: str | None = None
 
 
 @router.get("/conversations")
@@ -120,9 +131,58 @@ async def conversation(conversation_id: uuid.UUID, ctx: Member) -> list[MessageO
         )
         if conv is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "conversation_not_found")
-        msgs = await s.scalars(
-            select(Message).where(Message.conversation_id == conv.id).order_by(Message.created_at)
+        msgs = (
+            await s.scalars(
+                select(Message)
+                .where(Message.conversation_id == conv.id)
+                .order_by(Message.created_at)
+            )
+        ).all()
+        cited = {c.split("#")[0] for m in msgs for c in m.citations}
+        visible = await filter_visible_ids(s, ctx, cited - {COMPANY_PROFILE_ID})
+        meta = {
+            it.id: it
+            for it in (await s.execute(
+                select(SourceItem.id, SourceItem.type, SourceItem.title, SourceItem.updated_at, Container.name.label("container"))
+                .join(Container, (Container.id == SourceItem.container_id) & (Container.tenant_id == SourceItem.tenant_id))
+                .where(SourceItem.id.in_(sorted(visible)))
+            )).all()
+        }  # fmt: skip
+        qids = [m.query_id for m in msgs if m.role == "assistant" and m.query_id]
+        paths = (
+            dict(
+                (
+                    await s.execute(
+                        select(AuditLog.query_id, AuditLog.decision_path).where(
+                            AuditLog.query_id.in_(qids)
+                        )
+                    )
+                ).all()
+            )
+            if qids
+            else {}
         )
+
+        def sources(m: Message) -> list[CitationOut]:
+            out = []
+            for c in m.citations:
+                base = c.split("#")[0]
+                if base == COMPANY_PROFILE_ID:
+                    out.append(
+                        CitationOut(
+                            id=c,
+                            type="doc",
+                            title="Profil perusahaan",
+                            container="Perusahaan",
+                            date=None,
+                        )
+                    )
+                elif base in meta:
+                    it = meta[base]
+                    out.append(CitationOut(id=c, type=it.type, title=it.title or it.container, container=it.container,
+                                           date=it.updated_at.date().isoformat()))  # fmt: skip
+            return out
+
         return [
             MessageOut(
                 role=m.role,
@@ -131,6 +191,8 @@ async def conversation(conversation_id: uuid.UUID, ctx: Member) -> list[MessageO
                 created_at=m.created_at,
                 query_id=str(m.query_id) if m.query_id else None,
                 stale=m.permission_version != ctx.permission_version,
+                sources=sources(m) if m.role == "assistant" else [],
+                decision_path=paths.get(m.query_id) if m.role == "assistant" else None,
             )  # fmt: skip
             for m in msgs
         ]
@@ -170,13 +232,14 @@ async def source(citation_id: str, ctx: Member) -> SourceOut:
     h = res.hits[0]
     download = None
     async with tenant_session(ctx.tenant_id) as s:
-        key = await s.scalar(
-            select(SourceItem.storage_key).where(
-                SourceItem.id == h.item_id, visible_item_clause(ctx)
-            )
-        )
-    if key:
-        download = storage.presigned_get_url(key, expires_in=300)
+        row = (await s.execute(
+            select(SourceItem.storage_key, SourceItem.pii_spans).where(SourceItem.id == h.item_id, visible_item_clause(ctx))
+        )).first()  # fmt: skip
+        allowed = set(await s.scalars(select(PiiPermission.pii_type).where(PiiPermission.role_id.in_(sorted(ctx.business_role_ids))))) if ctx.business_role_ids else set()  # fmt: skip
+    # The original file is unmasked: offer it only if every kind of personal data in it is one the
+    # user's roles may see. Otherwise the masked text above is all they get.
+    if row and row.storage_key and {sp.get("type") for sp in (row.pii_spans or [])} <= allowed:
+        download = storage.presigned_get_url(row.storage_key, expires_in=300)
     return SourceOut(
         id=h.item_id, type=h.type, source=h.source, title=h.title, container=h.container, author=h.author,
         created_at=h.created_at, updated_at=h.updated_at, url=h.url, authority=h.authority,

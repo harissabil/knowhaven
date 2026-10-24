@@ -329,6 +329,21 @@ async def test_sse_endpoint_history_and_source_viewer(org):
     assert convs and convs[0]["id"] == f["conversation_id"]
     msgs = (await dimas.get(f"/api/conversations/{f['conversation_id']}")).json()
     assert [m["role"] for m in msgs] == ["user", "assistant"] and not msgs[1]["stale"]
+    # History keeps what the live answer showed: outcome, cited sources, and the step log.
+    assert msgs[1]["decision_path"] == "conflict"
+    assert {x["id"] for x in msgs[1]["sources"]} == set(msgs[1]["citations"]) and all(
+        x["title"] for x in msgs[1]["sources"]
+    )
+    trace = (await dimas.get(f"/api/queries/{msgs[1]['query_id']}/trace")).json()
+    assert [t["step"] for t in trace] == list(range(1, 9))
+
+    # The company's own name is common knowledge: citable by every member, no upload needed.
+    prof = await dimas.get("/api/sources/COMPANY-profile")
+    assert (
+        prof.status_code == 200
+        and "PT" in prof.json()["chunks"][0]["text"]
+        and prof.json()["download_url"] is None
+    )
 
     ok = await dimas.get("/api/sources/DOC-sop-reimbursement#3".replace("#", "%23"))
     assert (

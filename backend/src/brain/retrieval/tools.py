@@ -12,7 +12,10 @@ from collections import OrderedDict
 from dataclasses import dataclass, field
 from datetime import datetime
 
+from sqlalchemy import select
+
 from brain.config import get_settings
+from brain.db.models import Tenant
 from brain.db.session import tenant_session
 from brain.llm.embed import GeminiEmbedder, get_embedder
 from brain.rbac.context import RequestContext
@@ -20,6 +23,10 @@ from brain.retrieval import search
 from brain.retrieval.search import NO_PII, Hit, PiiPolicy, SearchResult
 
 NOT_FOUND = "Tidak ditemukan. / Not found."
+
+# The company's own facts (name + the admin-written profile) are common knowledge for every active
+# member, so they are always in the allowed set and citable like any source.
+COMPANY_PROFILE_ID = "COMPANY-profile"
 
 # Query embeddings, per tenant (cache keys always start with the tenant, 6.2). Small LRU.
 _VECTOR_CACHE: OrderedDict[tuple, list[float]] = OrderedDict()
@@ -160,11 +167,34 @@ class Retriever:
             res = await search.query_tasks(s, self.ctx, policy=self.policy, **args)
         return self._record("query_tasks", args, res, t)
 
+    async def company_profile(self) -> SearchResult:
+        t = time.monotonic()
+        async with tenant_session(self.ctx.tenant_id) as s:
+            tenant = await s.scalar(select(Tenant))
+        hits = [] if tenant is None else [_profile_hit(tenant)]
+        return self._record("company_profile", {}, SearchResult(hits=hits), t)
+
     async def get_item(self, item_id: str) -> SearchResult:
+        if item_id.split("#")[0] == COMPANY_PROFILE_ID:
+            return await self.company_profile()
         t = time.monotonic()
         async with tenant_session(self.ctx.tenant_id) as s:
             hits = await search.get_item(s, self.ctx, item_id, policy=self.policy)
         return self._record("get_item", {"item_id": item_id}, SearchResult(hits=hits or []), t)
+
+
+def _profile_hit(tenant: Tenant) -> Hit:
+    lines = [f"Nama perusahaan / Company name: {tenant.name}"]
+    if tenant.default_contact:
+        lines.append(f"Kontak umum / General contact: {tenant.default_contact}")
+    if tenant.profile and tenant.profile.strip():
+        lines.append(tenant.profile.strip())
+    return Hit(
+        citation_id=COMPANY_PROFILE_ID, item_id=COMPANY_PROFILE_ID, type="doc", source="system",
+        title=f"Profil perusahaan: {tenant.name}", container="Perusahaan", author=None,
+        created_at=tenant.created_at, updated_at=tenant.created_at, authority="official_doc",
+        injection_flag=False, text="\n".join(lines), context=None, url=None, score=0.0,
+    )  # fmt: skip
 
 
 def _safe(text: str) -> str:
