@@ -23,15 +23,15 @@ export function DoneStep({ w, names, goto }: { w: Wizard; names: string[]; goto:
         <h3 className="text-2xl md:text-3xl">{l("Setup selesai.", "Setup complete.")}</h3>
         <p className="text-muted mt-1">{l("Langkah yang dilewati bisa diatur kapan saja dari halaman admin.", "Anything you skipped can be set up anytime from the admin pages.")}</p>
       </div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      {/* <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {stats.map(([n, label]) => (
           <div key={label} className="card p-4">
             <p className="text-3xl font-semibold">{n}</p>
             <p className="eyebrow mt-1">{label}</p>
           </div>
         ))}
-      </div>
-      <ul className="grid sm:grid-cols-2 gap-x-6 gap-y-1.5">
+      </div> */}
+      {/* <ul className="grid sm:grid-cols-2 gap-x-6 gap-y-1.5">
         {names.slice(0, 8).map((s, i) => (
           <li key={s} className="flex gap-2 items-center">
             {w.done.includes(i) ? <Check size={16} className="text-ok" /> : <Circle size={16} className="text-warn" />}
@@ -43,9 +43,9 @@ export function DoneStep({ w, names, goto }: { w: Wizard; names: string[]; goto:
             )}
           </li>
         ))}
-      </ul>
+      </ul> */}
       <div className="flex gap-3 flex-wrap">
-        <Link href="/chat" className="btn btn-primary btn-lg">{l("Tanya Havi sekarang", "Ask Havi now")}</Link>
+        <Link href="/chat" className="btn btn-primary btn-lg">{l("Selesaikan Setup", "Complete Setup")}</Link>
         <Link href="/settings/workbuddy" className="btn btn-lg">{l("Hubungkan WorkBuddy (opsional)", "Connect WorkBuddy (optional)")}</Link>
       </div>
     </div>
