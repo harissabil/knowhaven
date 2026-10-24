@@ -31,6 +31,10 @@ class Settings(BaseSettings):
             .render_as_string(hide_password=False)
         )
 
+    # MCP server for WorkBuddy (separate process, `uv run brain-mcp`), design doc 13.
+    mcp_public_url: str = "http://localhost:8001/mcp"  # what users paste into ~/.workbuddy/mcp.json
+    mcp_rate_limit_per_min: int = 30  # per token
+
     session_secret: str = "change-me"
     credentials_key: str = ""
     web_origin: str = "http://localhost:3000"
