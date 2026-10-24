@@ -1,4 +1,5 @@
 "use client";
+import { copyText } from "@/lib/clipboard";
 import Link from "next/link";
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, ChevronDown, ChevronRight, Copy, Filter, RefreshCw, Search, ShieldCheck, X } from "lucide-react";
@@ -210,7 +211,7 @@ function RunDetail({ row, onClose }: { row: AuditRowOut; onClose: () => void }) 
   }, [detail]);
 
   const a = detail?.audit ?? row;
-  const copy = async (text: string) => { try { await navigator.clipboard.writeText(text); toast(l("Disalin", "Copied")); } catch { /* blocked */ } };
+  const copy = async (text: string) => { toast((await copyText(text)) ? l("Disalin", "Copied") : l("Gagal menyalin. Salin manual ya.", "Could not copy. Please copy it manually.")); };
 
   return (
     <section className="card overflow-hidden flex flex-col lg:max-h-[calc(100vh-220px)]">

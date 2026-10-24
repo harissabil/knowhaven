@@ -1,4 +1,5 @@
 "use client";
+import { copyText } from "@/lib/clipboard";
 import { useCallback, useEffect, useState } from "react";
 import { KeyRound, Copy, Check, Trash2 } from "lucide-react";
 import { Shell } from "@/components/Shell";
@@ -70,14 +71,10 @@ export default function WorkBuddy() {
   );
 
   async function copy(text: string, which: "cfg" | "ins") {
-    try {
-      await navigator.clipboard.writeText(text);
+    if (await copyText(text)) {
       setCopied(which);
       toast(l("Disalin ke clipboard", "Copied to clipboard"));
-      setTimeout(() => setCopied(""), 2000);
-    } catch {
-      // clipboard blocked
-    }
+      setTimeout(() => setCopied(""), 2000);} else { toast(l("Gagal menyalin. Salin manual ya.", "Could not copy. Please copy it manually.")); }
   }
 
   return (
