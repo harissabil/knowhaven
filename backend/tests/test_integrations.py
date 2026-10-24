@@ -390,3 +390,24 @@ def test_adf_panel_macro_plumbing_is_not_content():
     )
     md = atlassian.storage_to_markdown(storage)
     assert md.count("Data demo sintetis.") == 1 and "note" not in md and "## 1. Tujuan" in md
+
+
+async def test_bot_joins_public_channels_but_not_private_ones():
+    joined: list[str] = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        joined.append(dict(httpx.QueryParams(req.content.decode()))["channel"])
+        return httpx.Response(200, json={"ok": True})
+
+    chans = [{"id": "C1", "is_member": False}, {"id": "C2", "is_member": True},
+             {"id": "G1", "is_private": True, "is_member": False}, {"id": "C3", "is_archived": True}]  # fmt: skip
+    n, err = await slack.join_public("xoxb-t", chans, transport=httpx.MockTransport(handler))
+    assert (n, err, joined) == (1, None, ["C1"]) and chans[0]["is_member"]
+
+    missing = httpx.MockTransport(
+        lambda r: httpx.Response(200, json={"ok": False, "error": "missing_scope"})
+    )
+    assert await slack.join_public("xoxb-t", [{"id": "C9"}], transport=missing) == (
+        0,
+        "missing_scope",
+    )

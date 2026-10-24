@@ -29,6 +29,7 @@ BOT_SCOPES = [
     "groups:history",
     "channels:read",
     "groups:read",
+    "channels:join",  # join public channels by itself; private ones still need /invite @havi
     "users:read",
     "users:read.email",
 ]
@@ -138,6 +139,24 @@ async def _paged(method: str, key: str, token: str, transport=None, **params) ->
 async def channels(token: str, transport=None) -> list[dict]:
     return await _paged("conversations.list", "channels", token, transport,
                         types="public_channel,private_channel", exclude_archived="true")  # fmt: skip
+
+
+async def join_public(token: str, chans: list[dict], transport=None) -> tuple[int, str | None]:
+    """Join every public channel the bot isn't in yet, so its messages start arriving as events.
+    Safe: a joined channel is still a hidden container until an admin maps it (default-deny).
+    Returns (joined, error) where error is e.g. missing_scope for installs made before the
+    channels:join scope existed (reinstall via "Add to Slack" fixes it)."""
+    joined = 0
+    for c in chans:
+        if c.get("is_private") or c.get("is_member") or c.get("is_archived"):
+            continue
+        try:
+            await _call("conversations.join", token, transport, channel=c["id"])
+        except SlackError as e:
+            return joined, str(e)
+        c["is_member"] = True
+        joined += 1
+    return joined, None
 
 
 async def users(token: str, transport=None) -> list[dict]:
