@@ -307,3 +307,11 @@ async def test_grant_expiration(hitl_env):
     async with tenant_session(tenant_id) as s:
         req = await s.scalar(select(AccessRequest).where(AccessRequest.id == uuid.UUID(req_id)))
         assert req.status == "expired"
+
+
+async def test_me_reports_who_can_approve(hitl_env):
+    """/api/me can_approve drives the Approvals page: owners/managers yes, plain staff no."""
+    _, admin, dimas, sari, _ = hitl_env
+    for client, expected in ((admin, True), (sari, True), (dimas, False)):
+        me = (await client.get("/api/me")).json()
+        assert me["active_tenant"]["can_approve"] is expected, me["email"]

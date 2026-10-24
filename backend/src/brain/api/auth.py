@@ -66,6 +66,8 @@ async def build_me(auth: AuthSession) -> MeOut:
     if match is not None:
         async with tenant_session(match.tenant_id) as s:
             ctx = await load_context(s, match.tenant_id, auth.user_id)
+            # Inside the tenant session: outside it RLS hides every row and this is always False.
+            can_approve = ctx is not None and ctx.is_active and await is_approver(s, ctx)
         if ctx is not None:
             active = ActiveTenantOut(
                 tenant_id=str(ctx.tenant_id),
@@ -73,7 +75,7 @@ async def build_me(auth: AuthSession) -> MeOut:
                 status=ctx.membership_status,
                 roles=sorted(ctx.role_keys),
                 permission_version=ctx.permission_version,
-                can_approve=ctx.is_active and await is_approver(s, ctx),
+                can_approve=can_approve,
             )
     return MeOut(
         user_id=str(auth.user_id),
