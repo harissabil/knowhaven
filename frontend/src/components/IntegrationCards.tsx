@@ -1,5 +1,4 @@
 "use client";
-import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, Check, ExternalLink, Plug, RefreshCw, Unplug, UserRound } from "lucide-react";
 import { useSession } from "@/store/session";
@@ -10,6 +9,7 @@ import { relTime } from "@/components/documents";
 import { apiFetch, errorText } from "@/lib/api";
 import type { IntegrationOut, IntegrationsOut, MemberOut, SlackUserOut } from "@/lib/contracts";
 import { toast } from "@/components/ui/Toast";
+import { SourceAccessSetup } from "@/components/SourceAccessSetup";
 
 const Logo = ({ name }: { name: string }) => { const L = LOGOS[name]; return L ? <L size={28} /> : null; };
 const SOON = ["WhatsApp", "Telegram"];
@@ -33,11 +33,13 @@ export function IntegrationCards({ tid }: { tid: string }) {
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
   const [notice, setNotice] = useState("");
+  const [loads, setLoads] = useState(0); // new containers may appear after connect/sync/refresh
 
   const load = useCallback(async () => {
     try {
       const d = await apiFetch<IntegrationsOut>("/api/admin/integrations");
       setData(d);
+      setLoads((n) => n + 1);
       const on = (t: string) => d.integrations.some((i) => i.type === t && i.status !== "disconnected");
       if (tid) patchWizard(tid, { integ: { Slack: on("slack"), Atlassian: on("confluence") || on("jira") } }); // wizard step done
     } catch (e) {
@@ -218,14 +220,7 @@ export function IntegrationCards({ tid }: { tid: string }) {
       )}
       {!active && <p className="text-sm text-muted">{l("Pilih kartu di atas untuk mengatur integrasi.", "Pick a card above to set up an integration.")}</p>}
 
-      {(slack || atl) && (
-        <div className="card p-3 border-warn text-sm">
-          {l("Channel, space, dan project baru ", "New channels, spaces, and projects are ")}
-          <b>{l("tidak terlihat oleh siapa pun", "invisible to everyone")}</b>
-          {l(" sampai dipetakan ke peran.", " until they are mapped to roles.")}{" "}
-          <Link className="btn btn-primary ml-1" href="/admin/containers">{l("Petakan di Container & Izin", "Map in Containers & Access")}</Link>
-        </div>
-      )}
+      {(slack || atl) && <SourceAccessSetup refreshKey={loads} />}
     </div>
   );
 }

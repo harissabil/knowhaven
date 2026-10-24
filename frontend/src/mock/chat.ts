@@ -11,19 +11,20 @@ export const TRACE_STEPS = [
   { n: 8, kind: "CODE", name: { id: "Catat ke audit log", en: "Write audit log" } },
 ] as const;
 
+// Starter questions that fit any company: no tenant data (projects, branches, names) in them.
 export const SUGGESTIONS: Record<Lang, string[]> = {
   id: [
-    "Uang bensin per bulan berapa?",
-    "Kenapa stok telat di Makassar, apa yang masih open?",
-    "Ceritakan tentang Proyek Kenari",
-    "Grade gaji level 3 berapa?",
-    "Cuti tahunan gimana, bisa carry over gak?",
+    "Bagaimana cara mengajukan cuti?",
+    "Bagaimana prosedur klaim reimbursement?",
+    "Apa pengumuman terbaru dari HR?",
+    "Saya karyawan baru, apa yang perlu saya ketahui?",
+    "Tugas apa yang masih terbuka?",
   ],
   en: [
-    "How much is the monthly fuel allowance?",
-    "Why is stock late in Makassar, what's still open?",
-    "Tell me about Project Kenari",
-    "What is the salary grade for level 3?",
-    "How does annual leave work, can it carry over?",
+    "How do I request leave?",
+    "How do I claim a reimbursement?",
+    "What's the latest announcement from HR?",
+    "I'm new here, what should I know?",
+    "Which tasks are still open?",
   ],
 };
