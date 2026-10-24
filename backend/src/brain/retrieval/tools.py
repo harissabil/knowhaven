@@ -48,6 +48,7 @@ class ToolCall:
     filtered_count: int  # auditor-only
     ms: int
     vector: bool = True  # False when the semantic leg was skipped (embedding not ready in time)
+    filtered_ids: list[str] = field(default_factory=list)  # auditor-only
 
 
 @dataclass
@@ -104,6 +105,7 @@ class Retriever:
                 res.filtered_count,
                 int((time.monotonic() - started) * 1000),
                 vector=self._last_vector_used if tool.startswith("search_") else False,
+                filtered_ids=res.filtered_ids,
             )
         )
         return res

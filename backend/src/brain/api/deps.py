@@ -59,3 +59,14 @@ async def get_admin(ctx: Member) -> RequestContext:
 
 
 Admin = Annotated[RequestContext, Depends(get_admin)]
+
+
+async def get_auditor(ctx: Member) -> RequestContext:
+    """Audit log and full traces are for the auditor role only (design doc 4.3); owner/admin
+    configure the company but don't read the record of what others asked."""
+    if "auditor" not in ctx.role_keys:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "auditor_required")
+    return ctx
+
+
+Auditor = Annotated[RequestContext, Depends(get_auditor)]

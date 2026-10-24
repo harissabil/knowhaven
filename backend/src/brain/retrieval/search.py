@@ -61,6 +61,7 @@ class Hit:
 class SearchResult:
     hits: list[Hit] = field(default_factory=list)
     filtered_count: int = 0  # auditor-only: matching chunks of items the user can't see
+    filtered_ids: list[str] = field(default_factory=list)  # auditor-only: up to 20 of those items
 
 
 @dataclass(frozen=True)
@@ -243,27 +244,34 @@ async def hybrid_search(
                 result.hits.append(_hit(row, policy))
             if len(result.hits) == limit:
                 break
-    result.filtered_count = await _filtered_count(s, ctx, types, tsq, names)
+    result.filtered_count, result.filtered_ids = await _filtered(s, ctx, types, tsq, names)
     return result
 
 
-async def _filtered_count(s, ctx, types, tsq, names) -> int:
-    """Auditor-only count of matching chunks the user may NOT see (never shown to the user)."""
+async def _filtered(s, ctx, types, tsq, names) -> tuple[int, list[str]]:
+    """Auditor-only: matching chunks the user may NOT see, and (up to 20) of their item IDs
+    (design doc 4.1: the auditor sees which items were filtered, never their content)."""
     conds = []
     if tsq is not None:
         conds.append(Chunk.tsv.op("@@")(tsq))
     if names:
         conds.append(_similarity(names) >= TRIGRAM_MIN)
     if not conds:
-        return 0
-    return await s.scalar(
-        select(func.count())
-        .select_from(Chunk)
-        .join(
-            SourceItem, (SourceItem.id == Chunk.item_id) & (SourceItem.tenant_id == Chunk.tenant_id)
+        return 0, []
+    rows = (
+        await s.execute(
+            select(SourceItem.id, func.count())
+            .select_from(Chunk)
+            .join(
+                SourceItem,
+                (SourceItem.id == Chunk.item_id) & (SourceItem.tenant_id == Chunk.tenant_id),
+            )
+            .where(SourceItem.type.in_(types), not_(visible_item_clause(ctx)), or_(*conds))
+            .group_by(SourceItem.id)
+            .order_by(SourceItem.id)
         )
-        .where(SourceItem.type.in_(types), not_(visible_item_clause(ctx)), or_(*conds))
-    )
+    ).all()
+    return sum(n for _, n in rows), [i for i, _ in rows][:20]
 
 
 # --- tasks: structured query (design doc 7.4: tasks are answered from `structured`) ----------

@@ -66,3 +66,4 @@ markers = ["live: calls the real Gemini API (skip with -m 'not live')"]
 "src/brain/policy/*" = ["E501"]  # user-facing templates read better unwrapped
 "src/brain/agent/*" = ["E501"]
 "src/brain/api/chat.py" = ["E501"]
+"src/brain/api/audit.py" = ["E501"]
