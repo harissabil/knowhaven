@@ -59,15 +59,34 @@ async def department_of(s: AsyncSession, user_id: uuid.UUID) -> str | None:
 async def for_access(
     s: AsyncSession, topic_key: str, container_id: uuid.UUID | None, requester_id: uuid.UUID
 ) -> set[uuid.UUID]:
-    """Approvers for an access request; the first non-empty level wins (12.3)."""
-    for scope_type, scope_id in (
-        ("topic", topic_key),
-        ("container", str(container_id) if container_id else None),
-        ("department", await department_of(s, requester_id)),
-    ):
-        found = await _managers(s, scope_type, scope_id) - {requester_id}
-        if found:
-            return found
+    """Approvers for an access request; the first non-empty level wins (12.3).
+    Topic owner/manager -> container owner/manager -> department manager -> admin."""
+    if topic_key:
+        owner = await s.scalar(
+            select(TopicOwner.owner_user_id).where(TopicOwner.topic_key == topic_key)
+        )
+        if owner and owner != requester_id:
+            return {owner}
+        topic_mgrs = await _managers(s, "topic", topic_key) - {requester_id}
+        if topic_mgrs:
+            return topic_mgrs
+
+    if container_id:
+        c_owner = await s.scalar(
+            select(Container.owner_user_id).where(Container.id == container_id)
+        )
+        if c_owner and c_owner != requester_id:
+            return {c_owner}
+        c_mgrs = await _managers(s, "container", str(container_id)) - {requester_id}
+        if c_mgrs:
+            return c_mgrs
+
+    dept = await department_of(s, requester_id)
+    if dept:
+        dept_mgrs = await _managers(s, "department", dept) - {requester_id}
+        if dept_mgrs:
+            return dept_mgrs
+
     return await admins(s) - {requester_id}
 
 

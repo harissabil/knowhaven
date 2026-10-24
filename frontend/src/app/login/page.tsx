@@ -3,10 +3,11 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { usePersonas, useSession } from "@/store/session";
+import { usePersonas, useSession, type CurrentUser } from "@/store/session";
 import { PERSONAS as DEMO } from "@/mock/users";
 import { useL, useT } from "@/lib/i18n";
 import { Mascot, SpeechBubble } from "@/components/mascot/Mascot";
+import { apiFetch, ApiError } from "@/lib/api";
 
 const TITLES: Record<string, string> = {
   "Karyawan Baru": "New Hire", "Staf Ops Makassar": "Makassar Ops Staff", "Project Manager": "Project Manager", HR: "HR",
@@ -16,20 +17,73 @@ const TITLES: Record<string, string> = {
 
 export default function Login() {
   const router = useRouter();
-  const { login, lang, set } = useSession();
+  const { login, lang, set, syncMe } = useSession();
   const PERSONAS = usePersonas();
   const t = useT();
   const l = useL();
   const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
   const [err, setErr] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
-    const p = PERSONAS.find((x) => x.id === email.trim().toLowerCase() && x.password === pw);
-    if (!p) return setErr(l("Akun atau kata sandi salah.", "Wrong account or password."));
+    setErr("");
+    setLoading(true);
+
+    const inputAccount = email.trim().toLowerCase();
+
+    try {
+      // 1. Try real backend login
+      const res = await apiFetch<{
+        session_token?: string;
+        user_id?: string;
+        active_tenant_id?: string;
+        roles?: string[];
+      }>("/api/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ email: inputAccount, password: pw }),
+      });
+
+      if (res?.session_token) {
+        set({ sessionToken: res.session_token });
+      }
+
+      // Fetch full profile from /api/me
+      const me = await syncMe();
+      if (me) {
+        login(inputAccount, res.session_token, me as CurrentUser);
+        const roles = me.roles || [];
+        if (roles.length === 1 && roles[0] === "pending") {
+          router.push("/pending");
+        } else if (!me.tenants || me.tenants.length === 0) {
+          router.push("/onboarding");
+        } else {
+          router.push("/chat");
+        }
+        return;
+      }
+    } catch (e: unknown) {
+      if (e instanceof ApiError && e.status === 401) {
+        setErr(l("Akun atau kata sandi salah.", "Wrong account or password."));
+        setLoading(false);
+        return;
+      }
+      // If backend is unreachable or returned another error, try fallback mock check
+      console.warn("Backend login failed, checking local personas fallback...", e);
+    }
+
+    // Fallback for mock/offline testing
+    const p = PERSONAS.find((x) => x.id === inputAccount && x.password === pw);
+    if (!p) {
+      setErr(l("Akun atau kata sandi salah.", "Wrong account or password."));
+      setLoading(false);
+      return;
+    }
+
     login(p.id);
     router.push(!p.memberships.length ? "/onboarding" : p.memberships[0].roles.includes("pending") ? "/pending" : "/chat");
+    setLoading(false);
   }
 
   return (
@@ -51,11 +105,13 @@ export default function Login() {
             <button type="button" className="btn" onClick={() => set({ lang: lang === "id" ? "en" : "id" })}>{lang === "id" ? "EN" : "ID"}</button>
           </div>
           <label className="flex flex-col gap-1">{l("Akun", "Account")}
-            <input className="input" value={email} onChange={(e) => setEmail(e.target.value)} placeholder={l("mis. dimas", "e.g. dimas")} /></label>
+            <input className="input" value={email} onChange={(e) => setEmail(e.target.value)} placeholder={l("mis. dimas", "e.g. dimas")} disabled={loading} /></label>
           <label className="flex flex-col gap-1">{l("Kata sandi", "Password")}
-            <input className="input" type="password" value={pw} onChange={(e) => setPw(e.target.value)} /></label>
+            <input className="input" type="password" value={pw} onChange={(e) => setPw(e.target.value)} disabled={loading} /></label>
           {err && <p role="alert" className="text-bad">{err}</p>}
-          <button className="btn btn-primary btn-lg justify-center">{t("login")}</button>
+          <button className="btn btn-primary btn-lg justify-center" disabled={loading}>
+            {loading ? l("Memverifikasi…", "Verifying…") : t("login")}
+          </button>
         </form>
         <div className="card p-5">
           <h2 className="eyebrow mb-2">{t("demoAccounts")}</h2>
@@ -65,7 +121,7 @@ export default function Login() {
                 <tr key={p.id} className="border-t border-line">
                   <td className="py-1"><b>{p.id}</b> <span className="text-muted">{lang === "id" ? p.title : TITLES[p.title] ?? p.title}</span></td>
                   <td className="font-mono">{p.password}</td>
-                  <td><button className="btn" onClick={() => { setEmail(p.id); setPw(p.password); }}>{l("Isi", "Fill")}</button></td>
+                  <td><button className="btn" onClick={() => { setEmail(p.id); setPw(p.password); }} disabled={loading}>{l("Isi", "Fill")}</button></td>
                 </tr>
               ))}
             </tbody>

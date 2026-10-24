@@ -64,12 +64,30 @@ async def hitl_env(org, make_user):  # noqa: F811
             TopicOwner(
                 tenant_id=tenant_id,
                 topic_key="grade_gaji",
-                title="Grade Gaji & Kompensasi",
+                display_name="Grade Gaji & Kompensasi",
+                fallback_contact="hr@srn.example",
                 owner_user_id=uuid.UUID(sari.user_id),
                 tier="gated",
                 container_id=gated_box.id,
             )
         )
+        s.add(
+            TopicOwner(
+                tenant_id=tenant_id,
+                topic_key="uang_bensin",
+                display_name="Uang Bensin & Transportasi",
+                fallback_contact="hr@srn.example",
+                owner_user_id=uuid.UUID(sari.user_id),
+                tier="open",
+            )
+        )
+        hr_c = await s.scalar(
+            select(Container).where(
+                Container.tenant_id == tenant_id, Container.external_id == "HR"
+            )
+        )
+        if hr_c:
+            hr_c.owner_user_id = uuid.UUID(sari.user_id)
 
     # Ingest a document into the gated box
     doc = IngestItem(
@@ -262,7 +280,7 @@ async def test_draft_rejection(hitl_env):
             {
                 "topic": "uang_bensin",
                 "chosen": {"citation_id": "CHAT-pengumuman-hr-0001", "value": "Rp900.000"},
-                "competing": [{"citation_id": "DOC-sop-reimbursement#3", "value": "Rp800.000"}],
+                "competing": [{"citation_id": "DOC-sop-reimbursement#3", "value": "Rp500.000"}],
                 "stale_doc_ids": ["DOC-sop-reimbursement"],
             }
         ]

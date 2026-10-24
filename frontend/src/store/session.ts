@@ -3,6 +3,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { PERSONAS, TENANTS, type Persona, type Tenant } from "@/mock/users";
 import type { Role } from "@/lib/permissions";
+import { apiFetch } from "@/lib/api";
 
 export type Tier = "hidden" | "gated" | "open";
 export interface WContainer { name: string; source: string; tier: Tier; roles: string[] }
@@ -31,7 +32,6 @@ export const newWizard = (tid?: string): Wizard => ({
   step: 0, skipped: [], done: [], industry: "", industryOther: "", roles: tid === "srn" ? [...DEFAULT_ROLES] : [], docs: [], integ: {},
   containers: [], approver: "", topicOwner: "", fallback: "", pii: tid === "srn" ? ["hr"] : [], invites: [], invitees: [], tested: false,
   integMeta: {}, ingestLog: [],
-  // demo tenant ships with integrations already connected
   ...(tid === "srn" ? {
     integ: { Slack: true, Atlassian: true },
     integMeta: {
@@ -46,7 +46,25 @@ export const newWizard = (tid?: string): Wizard => ({
   } : {}),
 });
 
+export interface UserTenantSummary {
+  id: string;
+  name: string;
+  slug?: string;
+}
+
+export interface CurrentUser {
+  user_id: string;
+  email: string;
+  name: string;
+  active_tenant_id: string;
+  tenants: UserTenantSummary[];
+  roles: string[];
+  is_platform_admin?: boolean;
+}
+
 interface State {
+  sessionToken: string | null;
+  currentUser: CurrentUser | null;
   personaId: string | null;
   tenantId: string | null;
   theme: "light" | "dark";
@@ -55,10 +73,11 @@ interface State {
   customPersonas: Persona[];
   customTenants: (Tenant & { code: string })[];
   wizards: Record<string, Wizard>;
-  login: (id: string) => void;
-  logout: () => void;
-  setTenant: (id: string) => void;
-  set: (p: Partial<Pick<State, "theme" | "lang" | "fontScale">>) => void;
+  login: (id: string, token?: string, user?: CurrentUser) => void;
+  logout: () => Promise<void>;
+  setTenant: (id: string) => Promise<void>;
+  syncMe: () => Promise<CurrentUser | null>;
+  set: (p: Partial<Pick<State, "theme" | "lang" | "fontScale" | "sessionToken" | "currentUser">>) => void;
   signUp: (name: string, email: string, pw: string) => string | null;
   createCompany: (name: string) => string;
   joinByCode: (code: string) => string | null;
@@ -70,6 +89,8 @@ const allPersonas = (custom: Persona[]) => [...PERSONAS, ...custom];
 export const useSession = create<State>()(
   persist(
     (set, get) => ({
+      sessionToken: null,
+      currentUser: null,
       personaId: null,
       tenantId: null,
       theme: "light",
@@ -78,12 +99,68 @@ export const useSession = create<State>()(
       customPersonas: [],
       customTenants: [],
       wizards: {},
-      login: (id) => {
+      login: (id, token, user) => {
+        if (user) {
+          set({
+            sessionToken: token ?? null,
+            currentUser: user,
+            personaId: id,
+            tenantId: user.active_tenant_id,
+          });
+          return;
+        }
         const p = allPersonas(get().customPersonas).find((x) => x.id === id);
-        set({ personaId: id, tenantId: p?.memberships[0]?.tenantId ?? null });
+        set({
+          sessionToken: token ?? null,
+          personaId: id,
+          tenantId: p?.memberships[0]?.tenantId ?? null,
+        });
       },
-      logout: () => set({ personaId: null, tenantId: null }),
-      setTenant: (tenantId) => set({ tenantId }),
+      logout: async () => {
+        try {
+          if (get().sessionToken) {
+            await apiFetch("/api/auth/logout", { method: "POST" });
+          }
+        } catch {
+          // ignore network failure on logout
+        } finally {
+          set({ sessionToken: null, currentUser: null, personaId: null, tenantId: null });
+        }
+      },
+      setTenant: async (tenantId) => {
+        const { sessionToken, currentUser } = get();
+        if (sessionToken && currentUser) {
+          try {
+            await apiFetch("/api/auth/switch-tenant", {
+              method: "POST",
+              body: JSON.stringify({ tenant_id: tenantId }),
+            });
+            await get().syncMe();
+            return;
+          } catch {
+            // fallback to client-side switch
+          }
+        }
+        set({ tenantId });
+      },
+      syncMe: async () => {
+        try {
+          const me = await apiFetch<CurrentUser & { session_token?: string }>("/api/me");
+          if (me) {
+            const personaName = me.email.includes("@") ? me.email.split("@")[0] : me.email;
+            set({
+              currentUser: me,
+              tenantId: me.active_tenant_id,
+              personaId: personaName,
+              sessionToken: me.session_token ?? get().sessionToken,
+            });
+            return me;
+          }
+        } catch {
+          // ignore
+        }
+        return null;
+      },
       set: (p) => set(p),
       signUp: (name, email, pw) => {
         const id = email.trim().toLowerCase();
@@ -127,16 +204,36 @@ export const useSession = create<State>()(
 );
 
 export function usePersona(): { persona: Persona | null; roles: Role[] } {
-  const { personaId, tenantId, customPersonas } = useSession();
+  const { personaId, tenantId, customPersonas, currentUser } = useSession();
+
+  if (currentUser) {
+    const roles = (currentUser.roles || []) as Role[];
+    const persona: Persona = {
+      id: personaId || (currentUser.email.includes("@") ? currentUser.email.split("@")[0] : currentUser.email),
+      name: currentUser.name,
+      title: roles.join(", ") || "Member",
+      password: "",
+      memberships: currentUser.tenants.map((t) => ({
+        tenantId: t.id,
+        roles: t.id === currentUser.active_tenant_id ? roles : [],
+      })),
+    };
+    return { persona, roles };
+  }
+
   const persona = allPersonas(customPersonas).find((p) => p.id === personaId) ?? null;
   const roles = persona?.memberships.find((m) => m.tenantId === tenantId)?.roles ?? [];
   return { persona, roles };
 }
 
 export function useTenants(): Tenant[] {
-  const custom = useSession((s) => s.customTenants);
-  return [...TENANTS, ...custom];
+  const { currentUser, customTenants } = useSession();
+  if (currentUser && currentUser.tenants && currentUser.tenants.length > 0) {
+    return currentUser.tenants.map((t) => ({ id: t.id, name: t.name }));
+  }
+  return [...TENANTS, ...customTenants];
 }
+
 export function usePersonas(): Persona[] {
   return allPersonas(useSession((s) => s.customPersonas));
 }

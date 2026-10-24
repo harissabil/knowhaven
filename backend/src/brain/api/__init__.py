@@ -9,6 +9,7 @@ from brain.api import (
     chat,
     mcp_tokens,
     tenants,
+    tests_runner,
     uploads,
 )
 
@@ -23,3 +24,4 @@ router.include_router(chat.router)
 router.include_router(audit.router)
 router.include_router(mcp_tokens.router)
 router.include_router(approvals.router)
+router.include_router(tests_runner.router)

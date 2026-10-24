@@ -9,6 +9,7 @@ import { Confetti } from "@/components/ui/Confetti";
 import { Spot } from "@/components/ui/Spot";
 import { usePersona, useSession } from "@/store/session";
 import { useL } from "@/lib/i18n";
+import { apiFetch } from "@/lib/api";
 
 type Stage = "account" | "choose" | "company" | "join" | "building";
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -20,7 +21,7 @@ const strengthOf = (p: string) =>
 
 export default function Onboarding() {
   const router = useRouter();
-  const { signUp, createCompany, joinByCode, lang, set } = useSession();
+  const { signUp, createCompany, joinByCode, lang, set, syncMe } = useSession();
   const { persona } = usePersona();
   const l = useL();
   const [stage, setStage] = useState<Stage>("account");
@@ -50,7 +51,32 @@ export default function Onboarding() {
     setStage("building"); setTick(0);
     for (let i = 1; i <= BUILD.length; i++) { await sleep(650); setTick(i); }
     await sleep(900);
-    createCompany(company);
+
+    try {
+      const email = f.email || (persona?.id && persona.id.includes("@") ? persona.id : `${(f.name || persona?.name || "admin").toLowerCase().replace(/[^a-z0-9]/g, "") || "admin"}@srn-nusantara.co.id`);
+      const res = await apiFetch<{
+        tenant_id: string;
+        company_code: string;
+        session_token: string;
+      }>("/api/tenants/onboard", {
+        method: "POST",
+        body: JSON.stringify({
+          company_name: company,
+          admin_name: f.name || persona?.name || "Admin",
+          admin_email: email,
+          admin_password: f.pw || "Demo-SRN-2026!",
+        }),
+      });
+
+      if (res?.session_token) {
+        set({ sessionToken: res.session_token });
+        await syncMe();
+      }
+    } catch {
+      // offline fallback
+      createCompany(company);
+    }
+
     router.push("/admin/setup");
   }
 
@@ -194,10 +220,47 @@ export default function Onboarding() {
 
             {stage === "join" && (
               <motion.form key="join" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }} className="flex flex-col gap-5"
-                onSubmit={(e) => {
+                onSubmit={async (e) => {
                   e.preventDefault();
-                  const r = joinByCode(f.code);
-                  if (r) { setErr(l("Kode perusahaan tidak dikenal.", "Unknown company code.")); setShake((x) => x + 1); } else router.push("/pending");
+                  const code = f.code.trim().toUpperCase();
+
+                  try {
+                    const res = await apiFetch<{
+                      tenant_id: string;
+                      user_id: string;
+                      session_token: string;
+                      status: "pending" | "active";
+                    }>("/api/tenants/join", {
+                      method: "POST",
+                      body: JSON.stringify({
+                        company_code: code,
+                        name: f.name || persona?.name || "Calon Anggota",
+                        email: f.email || `${(f.name || "user").toLowerCase().replace(/[^a-z0-9]/g, "") || "user"}@srn-nusantara.co.id`,
+                        password: f.pw || "demo-pending",
+                      }),
+                    });
+
+                    if (res?.session_token) {
+                      set({ sessionToken: res.session_token });
+                      await syncMe();
+                      if (res.status === "pending") {
+                        router.push("/pending");
+                      } else {
+                        router.push("/chat");
+                      }
+                      return;
+                    }
+                  } catch {
+                    // fallback to mock join
+                  }
+
+                  const r = joinByCode(code);
+                  if (r) {
+                    setErr(l("Kode perusahaan tidak dikenal.", "Unknown company code."));
+                    setShake((x) => x + 1);
+                  } else {
+                    router.push("/pending");
+                  }
                 }}>
                 <h1 className="text-4xl">{l("Masukkan kode perusahaan", "Enter your company code")}</h1>
                 <motion.input key={shake} animate={shake ? { x: [0, -10, 10, -6, 6, 0] } : {}} className="input !text-2xl !py-3 font-mono tracking-widest text-center" autoFocus

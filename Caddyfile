@@ -20,6 +20,6 @@
     }
 
     handle {
-        respond "Workplace Brain API Gateway" 200
+        reverse_proxy web:3000
     }
 }
