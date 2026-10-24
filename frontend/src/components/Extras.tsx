@@ -25,7 +25,7 @@ export function Palette() {
   const t = useT();
   const l = useL();
   const router = useRouter();
-  const { roles } = usePersona();
+  const { roles, canApprove } = usePersona();
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") { e.preventDefault(); setOpen((o) => !o); setQ(""); }
@@ -34,7 +34,7 @@ export function Palette() {
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
   }, []);
-  const items = NAV.filter((n) => (!n.cap || can(roles, n.cap)) && t(n.id as Key).toLowerCase().includes(q.toLowerCase()));
+  const items = NAV.filter((n) => (!n.cap || can(roles, n.cap, canApprove)) && t(n.id as Key).toLowerCase().includes(q.toLowerCase()));
   return (
     <>
       <button className="btn" onClick={() => setOpen(true)}><Search size={16} /> {l("Cari", "Search")} <kbd className="text-xs">Ctrl+K</kbd></button>

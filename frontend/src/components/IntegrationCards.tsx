@@ -21,8 +21,8 @@ export function IntegrationCards({ tid }: { tid: string }) {
   const stored = useSession((s) => s.wizards[tid]);
   const patchWizard = useSession((s) => s.patchWizard);
   const tenantName = useTenants().find((t) => t.id === tid)?.name ?? "company";
-  const w: Wizard = stored ?? newWizard(tid);
-  const cur = () => useSession.getState().wizards[tid] ?? newWizard(tid);
+  const w: Wizard = stored ?? newWizard();
+  const cur = () => useSession.getState().wizards[tid] ?? newWizard();
 
   const [f, setF] = useState({ url: "", email: "", token: "" });
   const [busy, setBusy] = useState<string>("");
@@ -91,6 +91,10 @@ export function IntegrationCards({ tid }: { tid: string }) {
   ];
   return (
     <div className="flex flex-col gap-4">
+      <p role="note" className="text-sm p-3 rounded-erp border border-warn/40 bg-warn/10 text-warn">
+        {l("Pratinjau: koneksi Slack/Confluence/Jira belum tersambung ke backend. Tombol di sini hanya simulasi dan tidak mengubah data.",
+          "Preview: Slack/Confluence/Jira connections are not wired to the backend yet. These buttons are a simulation and change no data.")}
+      </p>
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3" role="group" aria-label={l("Pilih integrasi", "Choose an integration")}>
         {CARDS.map((c) => (
           <button key={c.key} type="button" aria-pressed={active === c.key} onClick={() => { setActive(c.key); setErr(""); }}

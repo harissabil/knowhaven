@@ -1,6 +1,9 @@
 import hashlib
+import json
 import math
+import time
 import uuid
+from pathlib import Path
 
 import httpx
 import pytest
@@ -108,3 +111,32 @@ class FakeEmbedder:
 
     async def embed_query(self, text):
         return (await self.embed_documents([text]))[0]
+
+
+# --- test results for GET /api/tests (design doc 20.1: report every result, failures included) ---
+# Outcomes are merged into test-results/last_run.json, so an offline run and a live run together
+# cover all cases. The API maps handbook cases (T01-T33) onto these test node IDs.
+
+_RESULTS = Path(__file__).resolve().parents[1] / "test-results" / "last_run.json"
+_outcomes: dict[str, dict] = {}
+
+
+def pytest_runtest_logreport(report):
+    nodeid = report.nodeid.split("[")[0]  # parametrized cases collapse to their test function
+    if report.when == "call" or report.outcome in ("failed", "skipped"):
+        prev = _outcomes.get(nodeid)
+        outcome = report.outcome
+        if prev and prev["outcome"] == "failed":
+            outcome = "failed"  # one failing parametrization fails the whole test
+        _outcomes[nodeid] = {"outcome": outcome, "at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+                             "duration_s": round(getattr(report, "duration", 0.0), 2)}  # fmt: skip
+
+
+def pytest_sessionfinish(session, exitstatus):
+    if not _outcomes:
+        return
+    _RESULTS.parent.mkdir(exist_ok=True)
+    data = json.loads(_RESULTS.read_text(encoding="utf-8")) if _RESULTS.exists() else {"tests": {}}
+    data["tests"].update(_outcomes)
+    data["updated_at"] = time.strftime("%Y-%m-%dT%H:%M:%S%z")
+    _RESULTS.write_text(json.dumps(data, indent=1, sort_keys=True), encoding="utf-8")

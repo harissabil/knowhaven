@@ -9,7 +9,7 @@ import { Confetti } from "@/components/ui/Confetti";
 import { Spot } from "@/components/ui/Spot";
 import { usePersona, useSession } from "@/store/session";
 import { useL } from "@/lib/i18n";
-import { apiFetch } from "@/lib/api";
+import { ApiError, errorText } from "@/lib/api";
 
 type Stage = "account" | "choose" | "company" | "join" | "building";
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -21,7 +21,7 @@ const strengthOf = (p: string) =>
 
 export default function Onboarding() {
   const router = useRouter();
-  const { signUp, createCompany, joinByCode, lang, set, syncMe } = useSession();
+  const { register, createCompany, joinByCode, lang, set } = useSession();
   const { persona } = usePersona();
   const l = useL();
   const [stage, setStage] = useState<Stage>("account");
@@ -31,6 +31,7 @@ export default function Onboarding() {
   const [shake, setShake] = useState(0);
   const [focus, setFocus] = useState(false);
   const [tick, setTick] = useState(0);
+  const [busy, setBusy] = useState(false);
   const up = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement>) => setF({ ...f, [k]: e.target.value });
 
   useEffect(() => { if (persona && stage === "account") setStage("choose"); }, [persona, stage]);
@@ -48,35 +49,16 @@ export default function Onboarding() {
   ], [l]);
 
   async function build() {
-    setStage("building"); setTick(0);
-    for (let i = 1; i <= BUILD.length; i++) { await sleep(650); setTick(i); }
-    await sleep(900);
-
+    setStage("building"); setTick(0); setErr("");
+    const created = createCompany(company);
+    for (let i = 1; i <= BUILD.length; i++) { await sleep(450); setTick(i); }
     try {
-      const email = f.email || (persona?.id && persona.id.includes("@") ? persona.id : `${(f.name || persona?.name || "admin").toLowerCase().replace(/[^a-z0-9]/g, "") || "admin"}@srn-nusantara.co.id`);
-      const res = await apiFetch<{
-        tenant_id: string;
-        company_code: string;
-        session_token: string;
-      }>("/api/tenants/onboard", {
-        method: "POST",
-        body: JSON.stringify({
-          company_name: company,
-          admin_name: f.name || persona?.name || "Admin",
-          admin_email: email,
-          admin_password: f.pw || "Demo-SRN-2026!",
-        }),
-      });
-
-      if (res?.session_token) {
-        set({ sessionToken: res.session_token });
-        await syncMe();
-      }
-    } catch {
-      // offline fallback
-      createCompany(company);
+      await created;
+    } catch (e) {
+      setErr(errorText(e)); setStage("company"); setShake((x) => x + 1);
+      return;
     }
-
+    await sleep(700);
     router.push("/admin/setup");
   }
 
@@ -140,11 +122,21 @@ export default function Onboarding() {
           <AnimatePresence mode="wait">
             {stage === "account" && (
               <motion.form key="account" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }} className="flex flex-col gap-4"
-                onSubmit={(e) => {
+                onSubmit={async (e) => {
                   e.preventDefault();
-                  const r = signUp(f.name, f.email, f.pw);
-                  if (r) { setErr(r.startsWith("Akun") ? l("Akun sudah terdaftar.", "Account already exists.") : l("Email wajib diisi dan kata sandi minimal 6 karakter.", "Email is required and the password needs at least 6 characters.")); setShake((x) => x + 1); }
-                  else { setErr(""); setStage("choose"); }
+                  if (f.pw.length < 8) { setErr(l("Kata sandi minimal 8 karakter.", "The password needs at least 8 characters.")); setShake((x) => x + 1); return; }
+                  setBusy(true);
+                  try {
+                    await register(f.name, f.email, f.pw);
+                    const next = new URLSearchParams(window.location.search).get("next");
+                    if (next?.startsWith("/join/")) { router.push(next); return; } // came from an invite link
+                    setErr(""); setStage("choose");
+                  } catch (x) {
+                    setErr(x instanceof ApiError && x.status === 409 ? l("Email sudah terdaftar. Silakan masuk.", "That email is already registered. Please sign in.")
+                      : x instanceof ApiError && x.status === 422 ? l("Periksa nama, email, dan kata sandi (min. 8).", "Check the name, email and password (min. 8).")
+                      : errorText(x));
+                    setShake((n) => n + 1);
+                  } finally { setBusy(false); }
                 }}>
                 <h1 className="text-4xl">{l("Buat akun Anda", "Create your account")}</h1>
                 <p className="text-muted">{l("Kurang dari satu menit.", "Takes under a minute.")}</p>
@@ -152,7 +144,7 @@ export default function Onboarding() {
                   <input className="input" value={f.name} onChange={up("name")} onFocus={() => setFocus(true)} onBlur={() => setFocus(false)} required autoFocus /></label>
                 <label className="flex flex-col gap-1.5">Email
                   <input className="input" type="email" value={f.email} onChange={up("email")} onFocus={() => setFocus(true)} onBlur={() => setFocus(false)} required /></label>
-                <label className="flex flex-col gap-1.5">{l("Kata sandi (min. 6)", "Password (min. 6)")}
+                <label className="flex flex-col gap-1.5">{l("Kata sandi (min. 8)", "Password (min. 8)")}
                   <span className="relative">
                     <input className="input pr-11" type={show ? "text" : "password"} value={f.pw} onChange={up("pw")} onFocus={() => setFocus(true)} onBlur={() => setFocus(false)} required />
                     <button type="button" aria-label={show ? "hide" : "show"} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-fg" onClick={() => setShow(!show)}>
@@ -169,7 +161,7 @@ export default function Onboarding() {
                   <p className="text-xs text-muted mt-1.5 h-4">{f.pw ? STRENGTH[strength] : ""}</p>
                 </div>
                 {err && <motion.p key={shake} initial={{ x: -8 }} animate={{ x: [0, -8, 8, -4, 4, 0] }} role="alert" className="text-bad">{err}</motion.p>}
-                <button className="btn btn-primary btn-lg">{l("Lanjut", "Continue")} <ArrowRight size={18} /></button>
+                <button className="btn btn-primary btn-lg" disabled={busy}>{l("Lanjut", "Continue")} <ArrowRight size={18} /></button>
                 <p className="text-sm text-muted text-center">{l("Sudah punya akun?", "Already have an account?")} <Link className="underline text-fg" href="/login">{l("Masuk", "Sign in")}</Link></p>
               </motion.form>
             )}
@@ -199,6 +191,7 @@ export default function Onboarding() {
               <motion.form key="company" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }} className="flex flex-col gap-5"
                 onSubmit={(e) => { e.preventDefault(); if (company.length >= 2) build(); }}>
                 <h1 className="text-4xl">{l("Beri nama perusahaan Anda", "Name your company")}</h1>
+                {err && <motion.p key={shake} initial={{ x: -8 }} animate={{ x: [0, -8, 8, -4, 4, 0] }} role="alert" className="text-bad">{err}</motion.p>}
                 <input className="input !text-xl !py-3" autoFocus value={f.company} onChange={up("company")} aria-label={l("Nama perusahaan", "Company name")} placeholder={l("mis. PT Sinar Rantai Nusantara", "e.g. Acme Logistics")} />
                 <div className="card p-4 flex items-center gap-4 overflow-hidden">
                   <motion.span key={company} initial={{ scale: 0.7, rotate: -8 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: "spring", stiffness: 300, damping: 14 }}
@@ -222,54 +215,23 @@ export default function Onboarding() {
               <motion.form key="join" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }} className="flex flex-col gap-5"
                 onSubmit={async (e) => {
                   e.preventDefault();
-                  const code = f.code.trim().toUpperCase();
-
+                  setBusy(true);
                   try {
-                    const res = await apiFetch<{
-                      tenant_id: string;
-                      user_id: string;
-                      session_token: string;
-                      status: "pending" | "active";
-                    }>("/api/tenants/join", {
-                      method: "POST",
-                      body: JSON.stringify({
-                        company_code: code,
-                        name: f.name || persona?.name || "Calon Anggota",
-                        email: f.email || `${(f.name || "user").toLowerCase().replace(/[^a-z0-9]/g, "") || "user"}@srn-nusantara.co.id`,
-                        password: f.pw || "demo-pending",
-                      }),
-                    });
-
-                    if (res?.session_token) {
-                      set({ sessionToken: res.session_token });
-                      await syncMe();
-                      if (res.status === "pending") {
-                        router.push("/pending");
-                      } else {
-                        router.push("/chat");
-                      }
-                      return;
-                    }
-                  } catch {
-                    // fallback to mock join
-                  }
-
-                  const r = joinByCode(code);
-                  if (r) {
-                    setErr(l("Kode perusahaan tidak dikenal.", "Unknown company code."));
-                    setShake((x) => x + 1);
-                  } else {
-                    router.push("/pending");
-                  }
+                    const r = await joinByCode(f.code.trim().toUpperCase());
+                    router.push(r.status === "pending" ? "/pending" : "/chat");
+                  } catch (x) {
+                    setErr(x instanceof ApiError && x.status === 404 ? l("Kode perusahaan tidak dikenal.", "Unknown company code.") : errorText(x));
+                    setShake((n) => n + 1);
+                  } finally { setBusy(false); }
                 }}>
                 <h1 className="text-4xl">{l("Masukkan kode perusahaan", "Enter your company code")}</h1>
                 <motion.input key={shake} animate={shake ? { x: [0, -10, 10, -6, 6, 0] } : {}} className="input !text-2xl !py-3 font-mono tracking-widest text-center" autoFocus
                   value={f.code} onChange={(e) => { setF({ ...f, code: e.target.value.toUpperCase() }); setErr(""); }} aria-label={l("Kode perusahaan", "Company code")} placeholder="XXX-0000" />
                 {err && <p role="alert" className="text-bad text-center">{err}</p>}
-                <p className="text-sm text-muted text-center">{l("Coba demo:", "Try the demo:")} <button type="button" className="underline font-mono text-fg" onClick={() => setF({ ...f, code: "SRN-4821" })}>SRN-4821</button></p>
+                <p className="text-sm text-muted text-center">{l("Kode ada di halaman Undangan milik admin.", "Your admin finds the code on the Invites page.")}</p>
                 <div className="flex gap-3">
                   <button type="button" className="btn" onClick={() => { setErr(""); setStage("choose"); }}>{l("Kembali", "Back")}</button>
-                  <button className="btn btn-primary btn-lg flex-1" disabled={!f.code.trim()}>{l("Gabung", "Join")} <ArrowRight size={18} /></button>
+                  <button className="btn btn-primary btn-lg flex-1" disabled={!f.code.trim() || busy}>{l("Gabung", "Join")} <ArrowRight size={18} /></button>
                 </div>
               </motion.form>
             )}
