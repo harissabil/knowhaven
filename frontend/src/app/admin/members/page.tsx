@@ -20,6 +20,7 @@ import {
   Mail,
 } from "lucide-react";
 import { Shell } from "@/components/Shell";
+import { RoleChip, StatusChip } from "@/components/Chip";
 import { toast } from "@/components/ui/Toast";
 import { useL, useT } from "@/lib/i18n";
 import { useSession } from "@/store/session";
@@ -405,45 +406,16 @@ export default function Members() {
                         </span>
                       ) : (
                         <div className="flex flex-wrap gap-1">
-                          {m.roles.map((r) => {
-                            const isSystem = ["owner", "admin", "auditor"].includes(r);
-                            return (
-                              <span
-                                key={r}
-                                className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full font-medium border ${isSystem
-                                  ? "bg-purple-500/10 text-purple-700 dark:text-purple-300 border-purple-500/30"
-                                  : "bg-brand/10 text-brand border-brand/20"
-                                  }`}
-                              >
-                                {isSystem && <Shield size={10} />}
-                                {r}
-                              </span>
-                            );
-                          })}
+                          {m.roles.map((r) => <RoleChip key={r} role={r} system={["owner", "admin", "auditor"].includes(r)} />)}
                         </div>
                       )}
                     </td>
 
                     {/* Status */}
                     <td className="px-5 py-3.5">
-                      {m.status === "active" && (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                          {l("Aktif", "Active")}
-                        </span>
-                      )}
-                      {m.status === "pending" && (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/30">
-                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                          {l("Menunggu Persetujuan", "Pending")}
-                        </span>
-                      )}
-                      {m.status === "removed" && (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-zinc-500/10 text-zinc-500 border border-zinc-500/20">
-                          <span className="w-1.5 h-1.5 rounded-full bg-zinc-400" />
-                          {l("Dikeluarkan", "Removed")}
-                        </span>
-                      )}
+                      {m.status === "active" && <StatusChip tone="ok">{l("Aktif", "Active")}</StatusChip>}
+                      {m.status === "pending" && <StatusChip tone="warn">{l("Menunggu Persetujuan", "Pending")}</StatusChip>}
+                      {m.status === "removed" && <StatusChip tone="muted">{l("Dikeluarkan", "Removed")}</StatusChip>}
                     </td>
 
                     {/* Joined Date */}

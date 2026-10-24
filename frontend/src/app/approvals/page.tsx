@@ -88,7 +88,7 @@ export default function Approvals() {
       <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
         <h2 className="font-semibold">{l("Permintaan akses", "Access requests")}</h2>
         <span className="flex items-center gap-2 text-sm">
-          <label className="flex items-center gap-1.5">{l("Durasi akses", "Grant duration")}
+          <label className="flex items-center gap-3 font-medium">{l("Durasi akses", "Grant duration")}
             <select className="input !w-auto !py-1" value={days} onChange={(e) => setDays(Number(e.target.value))}>
               {[1, 7, 14, 30, 90].map((d) => <option key={d} value={d}>{d} {l("hari", "days")}</option>)}
             </select>

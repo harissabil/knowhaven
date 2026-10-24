@@ -1,8 +1,9 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
-import { Plus, RefreshCw, Save } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Check, Plus, RefreshCw, Save } from "lucide-react";
 import { Shell } from "@/components/Shell";
 import { Table, Badge } from "@/components/Table";
+import { RoleChip } from "@/components/Chip";
 import { useL, useT } from "@/lib/i18n";
 import { apiFetch, errorText } from "@/lib/api";
 import type { ContainerOut, RoleOut } from "@/lib/contracts";
@@ -24,6 +25,7 @@ export default function Containers() {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [newName, setNewName] = useState("");
   const [newSource, setNewSource] = useState("upload_folder");
+  const panelRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -49,6 +51,7 @@ export default function Containers() {
 
   function edit(c: ContainerOut) {
     setEditing(c.id);
+    setTimeout(() => panelRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }), 50);
     // Editing is how an admin maps a container, so the form starts as mapped.
     setDraft({ tier: c.tier, mapped: true, role_ids: c.role_ids, authority_default: c.authority_default });
   }
@@ -103,7 +106,7 @@ export default function Containers() {
 
       <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
         <span className="text-sm text-muted">
-          {l("Container data & tingkat visibilitas (System Design §8 RBAC).", "Data containers & visibility tiers (System Design §8 RBAC).")}
+          {l("Atur siapa yang boleh melihat data di tiap container.", "Choose who can see the data in each container.")}
         </span>
         <button className="btn !py-1 !px-2.5 text-xs text-muted hover:text-fg inline-flex items-center gap-1.5" onClick={load} disabled={loading}>
           <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
@@ -111,66 +114,96 @@ export default function Containers() {
         </button>
       </div>
 
+      {editing && draft && (() => {
+        const c = containers.find((x) => x.id === editing);
+        if (!c) return null;
+        const field = "field";
+        return (
+          <div ref={panelRef} className="card p-5 mb-5 flex flex-col gap-5 border-brand/40">
+            <div className="flex items-baseline justify-between gap-3 flex-wrap">
+              <div>
+                <h2 className="text-lg font-semibold leading-tight">{c.name}</h2>
+                <p className="text-xs text-muted mt-0.5">{c.source} · {c.item_count} item</p>
+              </div>
+              <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+                <input type="checkbox" className="accent-[var(--brand)] w-4 h-4" checked={draft.mapped} onChange={(e) => setDraft({ ...draft, mapped: e.target.checked })} />
+                {l("dipetakan", "mapped")}
+              </label>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className={field}>Tier
+                <select className="input" value={draft.tier} onChange={(e) => setDraft({ ...draft, tier: e.target.value })}>
+                  {TIERS.map((x) => <option key={x} value={x}>{x}</option>)}
+                </select>
+              </label>
+              <label className={field}>{l("Otoritas", "Authority")}
+                <select className="input" value={draft.authority_default ?? ""} onChange={(e) => setDraft({ ...draft, authority_default: e.target.value || null })}>
+                  <option value="">{l("otoritas: default", "authority: default")}</option>
+                  {AUTHORITIES.map((a) => <option key={a} value={a}>{a}</option>)}
+                </select>
+              </label>
+            </div>
+
+            <fieldset className="flex flex-col gap-2">
+              <legend className="text-sm font-medium mb-2">{l("Peran yang boleh", "Allowed roles")}</legend>
+              <div className="flex flex-wrap gap-2">
+                {contentRoles.map((r) => {
+                  const on = draft.role_ids.includes(r.id);
+                  return (
+                    <label key={r.id} className={`inline-flex items-center gap-2 h-8 px-3 rounded-md text-sm cursor-pointer select-none ring-1 ring-inset transition-colors ${on ? "bg-tint text-brand ring-brand/40 font-medium" : "bg-surface2 text-muted ring-line hover:text-fg"}`}>
+                      <input
+                        type="checkbox"
+                        className="sr-only"
+                        checked={on}
+                        onChange={(e) => setDraft({ ...draft, role_ids: e.target.checked ? [...draft.role_ids, r.id] : draft.role_ids.filter((x) => x !== r.id) })}
+                      />
+                      {on && <Check size={13} aria-hidden />}
+                      {r.name}
+                    </label>
+                  );
+                })}
+              </div>
+            </fieldset>
+
+            <div className="flex justify-end gap-2 pt-4 border-t border-line">
+              <button className="btn" onClick={() => setEditing(null)}>{l("Batal", "Cancel")}</button>
+              <button className="btn btn-primary" onClick={() => save(c.id)}><Save size={14} /> {l("Simpan", "Save")}</button>
+            </div>
+          </div>
+        );
+      })()}
       <Table
         head={["Container", l("Sumber", "Source"), "Tier", l("Peran yang boleh", "Allowed roles"), l("Item", "Items"), ""]}
         rows={containers.map((c) =>
-          editing === c.id && draft
-            ? [
-                <b key="n">{c.name}</b>,
-                c.source,
-                <span key="t" className="flex flex-col gap-1">
-                  <select className="input !py-1" value={draft.tier} onChange={(e) => setDraft({ ...draft, tier: e.target.value })}>
-                    {TIERS.map((x) => <option key={x} value={x}>{x}</option>)}
-                  </select>
-                  <label className="text-xs flex items-center gap-1">
-                    <input type="checkbox" checked={draft.mapped} onChange={(e) => setDraft({ ...draft, mapped: e.target.checked })} /> {l("dipetakan", "mapped")}
-                  </label>
-                  <select className="input !py-1 text-xs" value={draft.authority_default ?? ""} onChange={(e) => setDraft({ ...draft, authority_default: e.target.value || null })}>
-                    <option value="">{l("otoritas: default", "authority: default")}</option>
-                    {AUTHORITIES.map((a) => <option key={a} value={a}>{a}</option>)}
-                  </select>
-                </span>,
-                <span key="r" className="flex flex-wrap gap-x-3 gap-y-1">
-                  {contentRoles.map((r) => (
-                    <label key={r.id} className="text-xs flex items-center gap-1">
-                      <input
-                        type="checkbox"
-                        checked={draft.role_ids.includes(r.id)}
-                        onChange={(e) => setDraft({ ...draft, role_ids: e.target.checked ? [...draft.role_ids, r.id] : draft.role_ids.filter((x) => x !== r.id) })}
-                      />
-                      {r.name}
-                    </label>
-                  ))}
-                </span>,
-                c.item_count,
-                <span key="a" className="flex gap-1">
-                  <button className="btn btn-primary !py-1" onClick={() => save(c.id)}><Save size={14} /> {l("Simpan", "Save")}</button>
-                  <button className="btn !py-1" onClick={() => setEditing(null)}>{l("Batal", "Cancel")}</button>
-                </span>,
-              ]
-            : [
+          [
                 c.name,
                 c.source,
                 <span key="b" className="flex items-center gap-1"><Badge v={c.tier} />{!c.mapped && <Badge v="unmapped" />}</span>,
                 // Access comes only from the role list; the tier just shapes "I don't know" answers.
-                c.mapped && c.role_ids.length ? c.role_ids.map(roleName).join(", ") : <span key="n" className="text-bad">{l("Tidak ada (tak terlihat siapa pun)", "None (visible to nobody)")}</span>,
+                c.mapped && c.role_ids.length ? <span key="rl" className="flex flex-wrap gap-1.5">{c.role_ids.map((id) => <RoleChip key={id} role={roleName(id)} />)}</span> : <span key="n" className="text-bad">{l("Tidak ada (tak terlihat siapa pun)", "None (visible to nobody)")}</span>,
                 c.item_count,
-                <button key="e" className="btn !py-1 !px-2 text-xs" onClick={() => edit(c)}>{l("Ubah", "Edit")}</button>,
+                <button key="e" className="btn !py-1 !px-2 text-xs ml-auto flex" onClick={() => edit(c)} disabled={editing === c.id}>{l("Ubah", "Edit")}</button>,
               ],
         )}
       />
 
-      <div className="card p-4 mt-5 flex flex-wrap gap-2 items-end">
-        <label className="flex flex-col gap-1 text-sm">{l("Container baru", "New container")}
-          <input className="input" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder={l("mis. SOP Gudang", "e.g. Warehouse SOPs")} />
-        </label>
-        <select className="input !w-auto" value={newSource} onChange={(e) => setNewSource(e.target.value)}>
-          <option value="upload_folder">{l("Folder unggahan", "Upload folder")}</option>
-          <option value="whatsapp_group">{l("Grup WhatsApp", "WhatsApp group")}</option>
-        </select>
-        <button className="btn" onClick={create} disabled={!newName.trim()}><Plus size={14} /> {l("Buat", "Create")}</button>
-        <p className="text-xs text-muted w-full">{l("Container Slack/Confluence/Jira dibuat otomatis oleh integrasi.", "Slack/Confluence/Jira containers are created by the integrations.")}</p>
-      </div>
-    </Shell>
+      <div className="card p-6 mt-6 flex flex-col gap-5">
+        <div className="grid sm:grid-cols-2 gap-5 items-end">
+          <label className="field">{l("Container baru", "New container")}
+            <input className="input" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder={l("mis. SOP Gudang", "e.g. Warehouse SOPs")} />
+          </label>
+          <label className="field">{l("Sumber", "Source")}
+            <select className="input" value={newSource} onChange={(e) => setNewSource(e.target.value)}>
+              <option value="upload_folder">{l("Folder unggahan", "Upload folder")}</option>
+              <option value="whatsapp_group">{l("Grup WhatsApp", "WhatsApp group")}</option>
+            </select>
+          </label>
+        </div>
+        <div className="flex items-center justify-between gap-4 flex-wrap pt-4 border-t border-line">
+          <p className="text-xs text-muted">{l("Container Slack/Confluence/Jira dibuat otomatis oleh integrasi.", "Slack/Confluence/Jira containers are created by the integrations.")}</p>
+          <button className="btn btn-primary ml-auto" onClick={create} disabled={!newName.trim()}><Plus size={14} /> {l("Buat", "Create")}</button>
+        </div>
+      </div>    </Shell>
   );
 }

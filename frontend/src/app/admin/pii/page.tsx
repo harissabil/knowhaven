@@ -48,16 +48,16 @@ export default function Pii() {
         <table className="w-full text-left">
           <thead className="bg-surface2">
             <tr>
-              <th className="p-3">{l("Peran", "Role")}</th>
-              {PII_TYPES.map((p) => <th key={p} className="p-3">{LABEL[p]}</th>)}
+              <th className="px-4 py-3">{l("Peran", "Role")}</th>
+              {PII_TYPES.map((p) => <th key={p} className="px-4 py-3">{LABEL[p]}</th>)}
             </tr>
           </thead>
           <tbody>
             {roles.map((r) => (
               <tr key={r.id} className="border-t border-line">
-                <td className="p-3 font-semibold">{r.name} <span className="text-xs text-muted font-mono">{r.key}</span></td>
+                <td className="px-4 py-3.5"><span className="inline-flex items-center gap-2.5"><span className="font-semibold">{r.name}</span><span className="text-xs text-muted font-mono px-1.5 py-0.5 rounded bg-surface2 border border-line">{r.key}</span></span></td>
                 {PII_TYPES.map((p) => (
-                  <td key={p} className="p-3">
+                  <td key={p} className="px-4 py-3.5">
                     <input type="checkbox" aria-label={`${r.name} ${LABEL[p]}`} checked={!!m[r.id]?.includes(p)} onChange={() => toggle(r.id, p)} />
                   </td>
                 ))}

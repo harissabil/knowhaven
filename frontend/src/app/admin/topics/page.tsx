@@ -105,52 +105,53 @@ export default function Topics() {
           x.fallback_contact,
           <Badge key="b" v={x.tier ?? "open"} />,
           containerName(x.container_id),
-          <span key="a" className="flex gap-1">
+          <span key="a" className="flex gap-1.5 justify-end">
             <button className="btn !py-1 !px-2 text-xs" onClick={() => { setEditingKey(x.topic_key); setForm({ ...empty(), ...x, aliasText: (x.aliases ?? []).join(", ") }); }}>{l("Ubah", "Edit")}</button>
             <button className="btn !py-1 !px-2 text-xs" onClick={() => remove(x.topic_key)} aria-label={l("Hapus", "Delete")}><Trash2 size={13} /></button>
           </span>,
         ])}
       />
 
-      <div className="card p-4 mt-5 grid md:grid-cols-3 gap-3 items-end">
-        <label className="flex flex-col gap-1 text-sm">{l("Kunci topik", "Topic key")}
-          <input className="input font-mono" value={editingKey ?? form.topic_key} disabled={!!editingKey} onChange={(e) => setForm({ ...form, topic_key: e.target.value })} placeholder="reimburse_bensin" />
-        </label>
-        <label className="flex flex-col gap-1 text-sm">{l("Nama tampilan", "Display name")}
-          <input className="input" value={form.display_name} onChange={(e) => setForm({ ...form, display_name: e.target.value })} />
-        </label>
-        <label className="flex flex-col gap-1 text-sm">{l("Alias (pisahkan koma)", "Aliases (comma-separated)")}
-          <input className="input" value={form.aliasText} onChange={(e) => setForm({ ...form, aliasText: e.target.value })} />
-        </label>
-        <label className="flex flex-col gap-1 text-sm">{l("Pemilik", "Owner")}
-          <select className="input" value={form.owner_user_id ?? ""} onChange={(e) => setForm({ ...form, owner_user_id: e.target.value || null })}>
-            <option value="">—</option>
-            {members.map((m) => <option key={m.user_id} value={m.user_id}>{m.name}</option>)}
-          </select>
-        </label>
-        <label className="flex flex-col gap-1 text-sm">{l("Kontak cadangan", "Fallback contact")}
-          <input className="input" value={form.fallback_contact} onChange={(e) => setForm({ ...form, fallback_contact: e.target.value })} placeholder="HR (hr@company.id)" />
-        </label>
-        <span className="grid grid-cols-2 gap-2">
-          <label className="flex flex-col gap-1 text-sm">Tier
-            <select className="input" value={form.tier} onChange={(e) => setForm({ ...form, tier: e.target.value })}>
-              {TIERS.map((x) => <option key={x} value={x}>{x}</option>)}
-            </select>
+      <div className="card p-6 mt-6 flex flex-col gap-6">
+        <div className="grid md:grid-cols-3 gap-5 items-end">
+          <label className="field">{l("Kunci topik", "Topic key")}
+            <input className="input font-mono" value={editingKey ?? form.topic_key} disabled={!!editingKey} onChange={(e) => setForm({ ...form, topic_key: e.target.value })} placeholder="reimburse_bensin" />
           </label>
-          <label className="flex flex-col gap-1 text-sm">Container
-            <select className="input" value={form.container_id ?? ""} onChange={(e) => setForm({ ...form, container_id: e.target.value || null })}>
+          <label className="field">{l("Nama tampilan", "Display name")}
+            <input className="input" value={form.display_name} onChange={(e) => setForm({ ...form, display_name: e.target.value })} />
+          </label>
+          <label className="field">{l("Alias (pisahkan koma)", "Aliases (comma-separated)")}
+            <input className="input" value={form.aliasText} onChange={(e) => setForm({ ...form, aliasText: e.target.value })} />
+          </label>
+          <label className="field">{l("Pemilik", "Owner")}
+            <select className="input" value={form.owner_user_id ?? ""} onChange={(e) => setForm({ ...form, owner_user_id: e.target.value || null })}>
               <option value="">—</option>
-              {containers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              {members.map((m) => <option key={m.user_id} value={m.user_id}>{m.name}</option>)}
             </select>
           </label>
-        </span>
-        <span className="flex gap-2 md:col-span-3">
+          <label className="field">{l("Kontak cadangan", "Fallback contact")}
+            <input className="input" value={form.fallback_contact} onChange={(e) => setForm({ ...form, fallback_contact: e.target.value })} placeholder="HR (hr@company.id)" />
+          </label>
+          <span className="grid grid-cols-2 gap-3">
+            <label className="field">Tier
+              <select className="input" value={form.tier} onChange={(e) => setForm({ ...form, tier: e.target.value })}>
+                {TIERS.map((x) => <option key={x} value={x}>{x}</option>)}
+              </select>
+            </label>
+            <label className="field">Container
+              <select className="input" value={form.container_id ?? ""} onChange={(e) => setForm({ ...form, container_id: e.target.value || null })}>
+                <option value="">—</option>
+                {containers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </label>
+          </span>
+        </div>
+        <div className="flex justify-end gap-2 pt-5 border-t border-line">
+          {editingKey && <button className="btn" onClick={() => { setEditingKey(null); setForm(empty()); }}>{l("Batal", "Cancel")}</button>}
           <button className="btn btn-primary" onClick={save} disabled={!(editingKey || form.topic_key.trim()) || !form.display_name.trim() || !form.fallback_contact.trim()}>
             {editingKey ? <Save size={14} /> : <Plus size={14} />} {editingKey ? l("Simpan", "Save") : l("Tambah topik", "Add topic")}
           </button>
-          {editingKey && <button className="btn" onClick={() => { setEditingKey(null); setForm(empty()); }}>{l("Batal", "Cancel")}</button>}
-        </span>
-      </div>
-    </Shell>
+        </div>
+      </div>    </Shell>
   );
 }

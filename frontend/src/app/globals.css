@@ -131,6 +131,19 @@ code, kbd, pre { font-family: var(--font-geist-mono), ui-monospace, monospace; }
   width: 100%;
   transition: border-color 0.16s var(--ease), box-shadow 0.16s var(--ease);
 }
+/* Form field: label above control. One look for every form. */
+.field { display: flex; flex-direction: column; gap: 0.875rem; font-size: 0.875rem; font-weight: 500; }
+.field > .input, .field > select, .field > input, .field > textarea { margin-top: 0.25rem; }
+
+/* Native selects: drop the browser arrow (it hugs the edge) and give the chevron room. */
+select.input {
+  appearance: none;
+  padding-right: 2.5rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238a847d' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.85rem center;
+  cursor: pointer;
+}
 .input::placeholder { color: var(--muted); }
 .input:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 22%, transparent); }
 :focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
