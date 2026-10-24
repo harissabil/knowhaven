@@ -91,7 +91,8 @@ jobs:
         env:
           TARGET: ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}
         run: |
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes "$TARGET" "SHA=${GITHUB_SHA} bash -s" <<'REMOTE'
+          set +e  # keep going so the log is printed either way
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes "$TARGET" "SHA=${GITHUB_SHA} bash -s" > deploy.log 2>&1 <<'REMOTE'
           set -euo pipefail
           APP=/opt/the-workplace-brain
           STAGE=/tmp/wb-release-$SHA
@@ -112,7 +113,9 @@ jobs:
           sudo docker compose build
           # Schema first (owner role from backend/.env); a failed migration stops the deploy
           # before any service is restarted.
-          sudo docker compose run --rm --no-deps api alembic upgrade head
+          # -T and </dev/null: this script itself arrives on stdin, and a container that reads stdin
+          # would swallow the rest of it (the deploy then "succeeds" without restarting anything).
+          sudo docker compose run -T --rm --no-deps api alembic upgrade head </dev/null
           sudo docker compose up -d --remove-orphans
           # rsync swaps files by rename and Caddy's single-file bind mount keeps the old inode,
           # so restart it to pick up a changed Caddyfile.
@@ -134,3 +137,8 @@ jobs:
           rm -rf "$STAGE" "$STAGE.tar.gz"
           echo "deployed $SHA (previous release kept in /opt/the-workplace-brain.prev)"
           REMOTE
+          status=$?
+          cat deploy.log
+          # A deploy only counts if the remote script reached its last line.
+          grep -q "deployed ${GITHUB_SHA}" deploy.log || { echo "::error::deploy script did not finish"; exit 1; }
+          exit $status
