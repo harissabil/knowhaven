@@ -487,3 +487,16 @@ def test_effective_date_comes_from_the_page_header_not_the_save_time():
         .isoformat()
         == "2026-10-24"
     )
+
+
+async def test_disconnect_frees_the_workspace_for_another_company(make_user):
+    admin_a, tenant_a = await _company(make_user, "PT Lepas A")
+    admin_b, tenant_b = await _company(make_user, "PT Lepas B")
+    team = f"TF{uuid.uuid4().hex[:8]}"
+    await store.upsert(tenant_a, "slack", team, {"bot_token": "xoxb-a"}, None, {"workspace": "W"})
+    with pytest.raises(store.WorkspaceTaken):
+        await store.upsert(tenant_b, "slack", team, {"bot_token": "xoxb-b"}, None, {})
+    assert (await admin_a.delete("/api/admin/integrations/slack")).status_code == 204
+    assert (await admin_a.delete("/api/admin/integrations/slack")).status_code == 404
+    await store.upsert(tenant_b, "slack", team, {"bot_token": "xoxb-b"}, None, {})  # now free
+    assert await store.resolve_tenant("slack", team) == tenant_b

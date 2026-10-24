@@ -72,9 +72,9 @@ async def upsert(
 
 
 async def resolve_tenant(type_: str, external_id: str) -> uuid.UUID | None:
-    """Which tenant owns this (connected) workspace? Runs before any tenant is known (SECURITY
-    DEFINER). A disconnected row owned by another tenant is still protected: inserting the same
-    (type, workspace) hits the unique constraint, which `upsert` reports as WorkspaceTaken."""
+    """Which tenant owns this workspace? Runs before any tenant is known (SECURITY DEFINER).
+    Disconnecting deletes the row, so a disconnected workspace is free for another company; a
+    concurrent claim still hits the unique constraint, which `upsert` reports as WorkspaceTaken."""
     async with global_session() as s:
         return await s.scalar(
             text("SELECT resolve_integration(:t, :e)"), {"t": type_, "e": external_id}

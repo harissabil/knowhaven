@@ -22,7 +22,7 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 
 from brain.api.deps import Admin, Auth
 from brain.api.uploads import get_ingestor
@@ -32,7 +32,6 @@ from brain.db.session import tenant_session
 from brain.ingestion.pipeline import Ingestor
 from brain.integrations import atlassian, slack, store, sync
 from brain.rbac.context import load_context
-from brain.security import encrypt
 
 router = APIRouter(tags=["integrations"])
 log = logging.getLogger(__name__)
@@ -351,17 +350,19 @@ async def sync_atlassian_now(
 
 @router.delete("/admin/integrations/{kind}", status_code=status.HTTP_204_NO_CONTENT)
 async def disconnect(kind: Literal["slack", "atlassian"], ctx: Admin) -> None:
-    """Stops syncing and forgets the credentials. Already-imported content stays (and keeps its
-    access rules) until an admin unmaps or removes it."""
+    """Stops syncing and deletes the integration with its credentials, which also frees the
+    workspace/site for another company (it's unique across companies). Already-imported content
+    stays, with its access rules, until an admin unmaps or removes it."""
     types = ["slack"] if kind == "slack" else ["confluence", "jira"]
     async with tenant_session(ctx.tenant_id) as s:
-        res = await s.execute(
-            update(Integration).where(Integration.type.in_(types), Integration.status != "disconnected")
-            .values(status="disconnected", config_encrypted=encrypt("{}"))
-        )  # fmt: skip
-        if res.rowcount == 0:
+        gone = (await s.execute(
+            delete(Integration).where(Integration.type.in_(types)).returning(Integration.type, Integration.external_workspace_id)
+        )).all()  # fmt: skip
+        if not gone:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "not_connected")
-        await audit.admin_event(s, ctx, "integration.disconnect", type=kind)
+        await audit.admin_event(
+            s, ctx, "integration.disconnect", type=kind, workspaces=sorted({w for _, w in gone})
+        )
 
 
 # --- Slack member mapping -------------------------------------------------------------------------
