@@ -9,8 +9,9 @@ owner → document owner → managers → admins) approves it; then `executors.e
 import difflib
 import re
 import uuid
+from datetime import UTC, datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from brain.audit import log as audit
@@ -147,14 +148,15 @@ async def approve(
     s: AsyncSession, ctx: RequestContext, draft_id: uuid.UUID, ingestor: Ingestor | None = None
 ) -> ActionDraft:
     draft = await load_for_decision(s, ctx, draft_id)
+    now = datetime.now(UTC)
     draft.status = "approved"
     draft.approver_id = ctx.user_id
-    draft.decided_at = func.now()
+    draft.decided_at = now
     await s.flush()
     try:
         res = await executors.execute(draft, ctx.tenant_id, ingestor=ingestor)
         draft.status = "executed"
-        draft.executed_at = func.now()
+        draft.executed_at = datetime.now(UTC)
         draft.exec_result = res
     except executors.ExecutionError as e:
         draft.status = "failed"
@@ -210,7 +212,7 @@ async def reject(
     draft = await load_for_decision(s, ctx, draft_id)
     draft.status = "rejected"
     draft.approver_id = ctx.user_id
-    draft.decided_at = func.now()
+    draft.decided_at = datetime.now(UTC)
     if note:
         payload = dict(draft.payload)
         payload["rejection_note"] = note

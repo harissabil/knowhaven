@@ -1,5 +1,6 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { apiFetch } from "@/lib/api";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -177,6 +178,43 @@ export default function Members() {
   const [filter, setFilter] = useState<"all" | "active" | "pending" | "removed">("all");
   const [search, setSearch] = useState("");
 
+  useEffect(() => {
+    async function loadMembers() {
+      try {
+        const res = await apiFetch<
+          {
+            id: string;
+            name: string;
+            email: string;
+            title?: string;
+            department?: string;
+            roles: string[];
+            status: string;
+            created_at: string;
+          }[]
+        >("/api/admin/members");
+        if (res && res.length > 0) {
+          setMembers(
+            res.map((m) => ({
+              id: m.id,
+              name: m.name,
+              email: m.email,
+              department: m.department || "Operasional & Gudang",
+              title: m.title || m.roles.join(", "),
+              roles: m.roles,
+              status: (m.status === "suspended" ? "removed" : m.status) as "active" | "pending" | "removed",
+              joinedAt: m.created_at ? m.created_at.split("T")[0] : "2026-10-24",
+              slackUser: `@${m.name.toLowerCase().replace(/[^a-z0-9]/g, "")}`,
+            })),
+          );
+        }
+      } catch {
+        // fallback to initial mock
+      }
+    }
+    loadMembers();
+  }, []);
+
   // Modals state
   const [selectedMember, setSelectedMember] = useState<MemberItem | null>(null);
   const [modalMode, setModalMode] = useState<"approve" | "editRoles" | "remove" | null>(null);
@@ -226,12 +264,26 @@ export default function Members() {
   };
 
   // Action submit handlers
-  const handleApproveConfirm = () => {
+  const handleApproveConfirm = async () => {
     if (!selectedMember) return;
     if (selectedRoles.length === 0) {
       toast(l("Pilih minimal satu peran untuk anggota baru", "Select at least one role for the new member"));
       return;
     }
+
+    try {
+      await apiFetch(`/api/admin/members/${selectedMember.id}/status`, {
+        method: "POST",
+        body: JSON.stringify({ status: "active" }),
+      });
+      await apiFetch(`/api/admin/members/${selectedMember.id}/roles`, {
+        method: "PATCH",
+        body: JSON.stringify({ roles: selectedRoles }),
+      });
+    } catch {
+      // offline/demo fallback
+    }
+
     setMembers((prev) =>
       prev.map((m) =>
         m.id === selectedMember.id ? { ...m, status: "active", roles: selectedRoles } : m
@@ -246,17 +298,35 @@ export default function Members() {
     closeModal();
   };
 
-  const handleReject = (m: MemberItem) => {
+  const handleReject = async (m: MemberItem) => {
+    try {
+      await apiFetch(`/api/admin/members/${m.id}/status`, {
+        method: "POST",
+        body: JSON.stringify({ status: "suspended" }),
+      });
+    } catch {
+      // offline fallback
+    }
     setMembers((prev) => prev.map((x) => (x.id === m.id ? { ...x, status: "removed" } : x)));
     toast(l(`Pendaftaran ${m.name} ditolak.`, `Application for ${m.name} was rejected.`));
   };
 
-  const handleSaveRoles = () => {
+  const handleSaveRoles = async () => {
     if (!selectedMember) return;
     if (selectedRoles.length === 0) {
       toast(l("Anggota harus memiliki minimal satu peran", "Member must have at least one role"));
       return;
     }
+
+    try {
+      await apiFetch(`/api/admin/members/${selectedMember.id}/roles`, {
+        method: "PATCH",
+        body: JSON.stringify({ roles: selectedRoles }),
+      });
+    } catch {
+      // offline fallback
+    }
+
     setMembers((prev) =>
       prev.map((m) => (m.id === selectedMember.id ? { ...m, roles: selectedRoles } : m))
     );
@@ -269,8 +339,18 @@ export default function Members() {
     closeModal();
   };
 
-  const handleRemoveConfirm = () => {
+  const handleRemoveConfirm = async () => {
     if (!selectedMember) return;
+
+    try {
+      await apiFetch(`/api/admin/members/${selectedMember.id}/status`, {
+        method: "POST",
+        body: JSON.stringify({ status: "suspended" }),
+      });
+    } catch {
+      // offline fallback
+    }
+
     setMembers((prev) =>
       prev.map((m) => (m.id === selectedMember.id ? { ...m, status: "removed" } : m))
     );
@@ -283,7 +363,16 @@ export default function Members() {
     closeModal();
   };
 
-  const handleRestore = (m: MemberItem) => {
+  const handleRestore = async (m: MemberItem) => {
+    try {
+      await apiFetch(`/api/admin/members/${m.id}/status`, {
+        method: "POST",
+        body: JSON.stringify({ status: "active" }),
+      });
+    } catch {
+      // offline fallback
+    }
+
     setMembers((prev) =>
       prev.map((x) =>
         x.id === m.id ? { ...x, status: "active", roles: x.roles.length ? x.roles : ["staff"] } : x

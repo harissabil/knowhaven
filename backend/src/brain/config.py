@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     session_secret: str = "change-me"
     credentials_key: str = ""
     web_origin: str = "http://localhost:3000"
+    cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
 
     # Gemini via Agent Platform (formerly Vertex AI). Preferred: service account (project + key
     # file). Fallback: express-mode API key. Measured 2026-10-24: embeddings on `global` take

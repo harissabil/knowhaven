@@ -3,11 +3,10 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { MessageSquare, CheckSquare, Users, Shield, Plug, Upload, ScrollText, FlaskConical, KeyRound, LogOut, Settings } from "lucide-react";
-import { useSession, usePersona } from "@/store/session";
+import { useSession, usePersona, useTenants } from "@/store/session";
 import { can, NAV } from "@/lib/permissions";
 import { motion } from "framer-motion";
 import { useL, useT, type Key } from "@/lib/i18n";
-import { useTenants } from "@/store/session";
 import { Mascot } from "@/components/mascot/Mascot";
 import { Launcher, Palette } from "@/components/Extras";
 
@@ -60,7 +59,7 @@ export function Shell({ children, title, fullBleed }: { children: React.ReactNod
       <div className={`flex-1 flex flex-col min-w-0 ${fullBleed ? "h-full overflow-hidden" : ""}`}>
         <header className="sticky top-0 z-10 flex flex-wrap items-center gap-2 border-b border-line bg-bg/80 backdrop-blur-md px-5 py-3 shrink-0">
           {wizard ? <span className="flex items-center gap-2 font-bold"><Mascot size={36} /> Knowhaven</span> : (
-          <select className={sel} aria-label={t("tenant")} value={s.tenantId ?? ""} onChange={(e) => s.setTenant(e.target.value)}>
+            <select className={sel} aria-label={t("tenant")} value={s.tenantId ?? ""} onChange={(e) => s.setTenant(e.target.value)}>
               {myTenants.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
             </select>
           )}
@@ -68,7 +67,7 @@ export function Shell({ children, title, fullBleed }: { children: React.ReactNod
           {!wizard && <Palette />}
           <button className="btn" onClick={() => s.set({ lang: s.lang === "id" ? "en" : "id" })}>{s.lang === "id" ? "EN" : "ID"}</button>
           <span className="text-sm text-muted">{persona.name} · {roles.join(", ")}</span>
-          <button className="btn" onClick={() => { s.logout(); router.push("/login"); }}><LogOut size={16} /> {t("logout")}</button>
+          <button className="btn" onClick={async () => { await s.logout(); router.push("/login"); }}><LogOut size={16} /> {t("logout")}</button>
         </header>
         <motion.main
           className={fullBleed ? "flex-1 flex flex-col min-h-0 w-full overflow-hidden" : "p-6 md:p-8 flex-1 w-full max-w-6xl mx-auto"}

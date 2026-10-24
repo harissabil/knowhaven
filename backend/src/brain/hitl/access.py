@@ -77,11 +77,12 @@ async def approve(
     s: AsyncSession, ctx: RequestContext, request_id: uuid.UUID, days: int
 ) -> AccessRequest:
     req = await _load_for_decision(s, ctx, request_id)
-    expires = datetime.now(UTC) + timedelta(days=days)
+    now = datetime.now(UTC)
+    expires = now + timedelta(days=days)
     req.status, req.approver_id, req.decided_at, req.expires_at = (
         "approved",
         ctx.user_id,
-        func.now(),
+        now,
         expires,
     )
     s.add(TempGrant(tenant_id=ctx.tenant_id, user_id=req.requester_id, container_id=req.container_id,
@@ -96,7 +97,7 @@ async def reject(
     s: AsyncSession, ctx: RequestContext, request_id: uuid.UUID, note: str | None
 ) -> AccessRequest:
     req = await _load_for_decision(s, ctx, request_id)
-    req.status, req.approver_id, req.decided_at = "rejected", ctx.user_id, func.now()
+    req.status, req.approver_id, req.decided_at = "rejected", ctx.user_id, datetime.now(UTC)
     await audit.admin_event(s, ctx, "access.reject", request_id=req.id, requester_id=req.requester_id,
                             topic_key=req.topic_key, note=note)  # fmt: skip
     return req
@@ -140,11 +141,13 @@ async def list_access_requests(
 async def expire_grants(s: AsyncSession, tenant_id: uuid.UUID) -> int:
     """Mark approved requests whose grant ran out as expired and bump the permission version so
     open conversations recompute (8.5). Grants are already ignored after expires_at."""
-    res = await s.execute(
+    res = await s.scalars(
         update(AccessRequest)
         .where(AccessRequest.status == "approved", AccessRequest.expires_at <= func.now())
         .values(status="expired")
+        .returning(AccessRequest.id)
     )
-    if res.rowcount:
+    expired_ids = list(res.all())
+    if expired_ids:
         await bump_permission_version(s, tenant_id)
-    return res.rowcount
+    return len(expired_ids)
