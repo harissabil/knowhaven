@@ -411,3 +411,27 @@ async def test_bot_joins_public_channels_but_not_private_ones():
         0,
         "missing_scope",
     )
+
+
+def test_effective_date_comes_from_the_page_header_not_the_save_time():
+    storage = (
+        '<table><tbody><tr><th><p>Berlaku sejak</p></th><td><p><time datetime="2026-03-01" /></p></td></tr></tbody></table>'
+        "<h2>3. Uang Bensin</h2><p>Rp500.000 per bulan.</p>"
+    )
+    page = {
+        "id": "1",
+        "title": "SOP",
+        "createdAt": "2026-10-24T10:00:00Z",
+        "version": {"number": 1, "createdAt": "2026-10-24T10:00:00Z"},
+        "body": {"storage": {"value": storage}},
+    }
+    item = atlassian.page_to_item(page, atlassian.Space("1", "HR", "HR"), "https://x.atlassian.net")
+    assert item.updated_at.date().isoformat() == "2026-03-01" and item.created_at <= item.updated_at
+    assert "2026-03-01" in atlassian.storage_to_markdown(storage)
+    page["body"]["storage"]["value"] = "<p>Tanpa tanggal.</p>"
+    assert (
+        atlassian.page_to_item(page, atlassian.Space("1", "HR", "HR"), "https://x")
+        .updated_at.date()
+        .isoformat()
+        == "2026-10-24"
+    )

@@ -208,8 +208,13 @@ class _ToMarkdown(HTMLParser):
         super().__init__(convert_charrefs=True)
         self.out: list[str] = []
         self._skip = 0  # inside ac:parameter etc.
+        self._cell = 0  # inside td/th: keep a table row on one line
 
     def handle_starttag(self, tag, attrs):
+        if tag == "time" and not self._skip:
+            # <time datetime="2026-03-01" />: the date is an attribute, not text
+            self.out.append(dict(attrs).get("datetime") or "")
+            return
         if tag in self.SKIP:
             self._skip += 1
         elif self._skip:
@@ -219,17 +224,23 @@ class _ToMarkdown(HTMLParser):
         elif tag == "li":
             self.out.append("\n- ")
         elif tag in ("td", "th"):
-            self.out.append(" | ")
+            self._cell += 1
+            self.out.append("| ")
         elif tag in self.BLOCK:
-            self.out.append("\n")
+            self.out.append(" " if self._cell and tag != "tr" else "\n")
 
     def handle_endtag(self, tag):
         if tag in self.SKIP:
             self._skip = max(0, self._skip - 1)
         elif self._skip:
             return
+        elif tag in ("td", "th"):
+            self._cell = max(0, self._cell - 1)
+            self.out.append(" ")
+        elif tag == "tr":
+            self.out.append("|\n")
         elif re.fullmatch(r"h[1-6]", tag) or tag in self.BLOCK:
-            self.out.append("\n")
+            self.out.append(" " if self._cell else "\n")
 
     def handle_data(self, data):
         if not self._skip:
@@ -293,9 +304,24 @@ def _dt(value: str | None) -> datetime:
     return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
 
+# Header rows our pages use to state when a document takes effect. Policies are decided by their
+# effective date, not by when someone last saved the page (the demo pages were all created on one
+# day, which would otherwise make an old SOP look newer than a later HR announcement).
+_EFFECTIVE = re.compile(
+    r"\b(?:berlaku sejak|tanggal rapat|tanggal charter|tanggal berlaku|effective(?: date| from)?)[\s|:]*(\d{4}-\d{2}-\d{2})",
+    re.I,
+)
+
+
+def effective_date(markdown: str) -> datetime | None:
+    m = _EFFECTIVE.search(markdown)
+    return datetime.fromisoformat(m.group(1) + "T00:00:00+07:00") if m else None
+
+
 def page_to_item(page: dict, space: Space, site: str) -> IngestItem:
     storage = ((page.get("body") or {}).get("storage") or {}).get("value", "")
-    md_title, sections = parse_markdown(storage_to_markdown(storage))
+    markdown = storage_to_markdown(storage)
+    md_title, sections = parse_markdown(markdown)
     title = page.get("title") or md_title or page["id"]
     version = page.get("version") or {}
     webui = (page.get("_links") or {}).get("webui")
@@ -310,8 +336,11 @@ def page_to_item(page: dict, space: Space, site: str) -> IngestItem:
         title=title,
         id_hint=slugify(title),
         version=int(version.get("number") or 1),
-        created_at=_dt(page.get("createdAt")),
-        updated_at=_dt(version.get("createdAt") or page.get("createdAt")),
+        created_at=min(
+            _dt(page.get("createdAt")), effective_date(markdown) or _dt(page.get("createdAt"))
+        ),
+        updated_at=effective_date(markdown)
+        or _dt(version.get("createdAt") or page.get("createdAt")),
         url=f"{site}/wiki{webui}" if webui else None,
     )
 
