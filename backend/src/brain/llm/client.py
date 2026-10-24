@@ -7,16 +7,38 @@ from brain.config import get_settings
 
 
 @lru_cache
-def get_genai_client() -> genai.Client:
-    """One shared client. Express-mode API key if set, else project/location + ADC."""
+def _credentials():
+    from google.oauth2 import service_account
+
+    path = get_settings().google_application_credentials
+    if not path:
+        return None  # Application Default Credentials (e.g. on a GCP host)
+    return service_account.Credentials.from_service_account_file(
+        path, scopes=["https://www.googleapis.com/auth/cloud-platform"]
+    )
+
+
+@lru_cache
+def get_genai_client(location: str | None = None) -> genai.Client:
+    """One shared client per location. Service account (project) if configured, else the
+    express-mode API key (which can't pick a location)."""
     s = get_settings()
-    if s.google_api_key:
-        return genai.Client(vertexai=True, api_key=s.google_api_key)
     if s.google_cloud_project:
         return genai.Client(
-            vertexai=True, project=s.google_cloud_project, location=s.google_cloud_location
+            vertexai=True,
+            project=s.google_cloud_project,
+            location=location or s.google_cloud_location,
+            credentials=_credentials(),
         )
-    raise RuntimeError("Gemini not configured: set GOOGLE_API_KEY or GOOGLE_CLOUD_PROJECT")
+    if s.google_api_key:
+        return genai.Client(vertexai=True, api_key=s.google_api_key)
+    raise RuntimeError(
+        "Gemini not configured: set GOOGLE_CLOUD_PROJECT (+ key file) or GOOGLE_API_KEY"
+    )
+
+
+def get_embedding_client() -> genai.Client:
+    return get_genai_client(get_settings().embedding_location)
 
 
 _semaphore: asyncio.Semaphore | None = None

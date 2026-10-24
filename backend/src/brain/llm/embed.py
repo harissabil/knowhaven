@@ -12,7 +12,7 @@ from google import genai
 from google.genai import types
 
 from brain.config import Settings, get_settings
-from brain.llm.client import get_genai_client, model_slots
+from brain.llm.client import get_embedding_client, model_slots
 
 
 def _normalize(v: list[float]) -> list[float]:
@@ -31,7 +31,7 @@ class GeminiEmbedder:
 
     @property
     def client(self) -> genai.Client:
-        return self._client or get_genai_client()
+        return self._client or get_embedding_client()
 
     async def _embed(self, texts: list[str], task_type: str) -> list[list[float]]:
         last: Exception | None = None

@@ -35,11 +35,14 @@ class Settings(BaseSettings):
     credentials_key: str = ""
     web_origin: str = "http://localhost:3000"
 
-    # Gemini via Agent Platform (formerly Vertex AI). API key = express mode;
-    # otherwise project + location + GOOGLE_APPLICATION_CREDENTIALS.
+    # Gemini via Agent Platform (formerly Vertex AI). Preferred: service account (project + key
+    # file). Fallback: express-mode API key. Measured 2026-10-24: embeddings on `global` take
+    # ~11.5 s/call but 0.13-0.4 s in asia-southeast1; Gemini 3.x generation is only on `global`.
     google_api_key: str = ""
     google_cloud_project: str = ""
-    google_cloud_location: str = "global"
+    google_application_credentials: str = ""  # path to the service-account JSON (outside the repo)
+    google_cloud_location: str = "global"  # generation
+    embedding_location: str = "asia-southeast1"
     # Model tiers. Never above gemini-3.8-flash (cost); stable IDs only, no -preview.
     # lite: understand, retrieval planning, ingestion extraction.
     # flash_fast: claim extraction (blocks streaming, output never shown).
