@@ -55,11 +55,7 @@ async def hitl_env(org, make_user):  # noqa: F811
         )
         s.add(gated_box)
         await s.flush()
-        s.add(
-            ContainerAcl(
-                tenant_id=tenant_id, container_id=gated_box.id, role_id=role_ids["hr"]
-            )
-        )
+        s.add(ContainerAcl(tenant_id=tenant_id, container_id=gated_box.id, role_id=role_ids["hr"]))
         s.add(
             TopicOwner(
                 tenant_id=tenant_id,
@@ -82,9 +78,7 @@ async def hitl_env(org, make_user):  # noqa: F811
             )
         )
         hr_c = await s.scalar(
-            select(Container).where(
-                Container.tenant_id == tenant_id, Container.external_id == "HR"
-            )
+            select(Container).where(Container.tenant_id == tenant_id, Container.external_id == "HR")
         )
         if hr_c:
             hr_c.owner_user_id = uuid.UUID(sari.user_id)
@@ -140,9 +134,7 @@ async def test_access_request_lifecycle_and_security(hitl_env):
     assert r_dup.json()["detail"] == "request_already_pending"
 
     # 4. Requester cannot approve their own request
-    r_self = await dimas.post(
-        f"/api/approvals/access-requests/{req_id}/approve", json={"days": 7}
-    )
+    r_self = await dimas.post(f"/api/approvals/access-requests/{req_id}/approve", json={"days": 7})
     assert r_self.status_code == 403
     assert r_self.json()["detail"] == "self_approval_forbidden"
 
@@ -155,9 +147,7 @@ async def test_access_request_lifecycle_and_security(hitl_env):
     assert any(x["id"] == req_id for x in sari_reqs)
 
     # 7. Sari approves the request for 7 days
-    r_app = await sari.post(
-        f"/api/approvals/access-requests/{req_id}/approve", json={"days": 7}
-    )
+    r_app = await sari.post(f"/api/approvals/access-requests/{req_id}/approve", json={"days": 7})
     assert r_app.status_code == 200, r_app.text
     assert r_app.json()["status"] == "approved"
     assert r_app.json()["approver_id"] == sari.user_id
@@ -204,9 +194,7 @@ async def test_access_request_rejection(hitl_env, make_user):
     assert r_rej.json()["status"] == "rejected"
 
     # Approving an already decided request fails
-    r_late = await sari.post(
-        f"/api/approvals/access-requests/{req_id}/approve", json={"days": 3}
-    )
+    r_late = await sari.post(f"/api/approvals/access-requests/{req_id}/approve", json={"days": 3})
     assert r_late.status_code == 409
     assert r_late.json()["detail"] == "already_decided"
 
@@ -238,9 +226,7 @@ async def test_action_draft_lifecycle_and_execution(hitl_env):
     assert "Rp500.000" in d["diff"] and "Rp750.000" in d["diff"]
 
     # 4. Sari edits the draft (e.g. to Rp800.000)
-    r_edit = await sari.patch(
-        f"/api/approvals/drafts/{draft_id}", json={"new_value": "Rp800.000"}
-    )
+    r_edit = await sari.patch(f"/api/approvals/drafts/{draft_id}", json={"new_value": "Rp800.000"})
     assert r_edit.status_code == 200
     d_edited = r_edit.json()
     assert d_edited["payload"]["new_value"] == "Rp800.000"
@@ -257,9 +243,7 @@ async def test_action_draft_lifecycle_and_execution(hitl_env):
 
     # 6. Verify that the document in DB was updated to version 2 with new text
     async with tenant_session(tenant_id) as s:
-        item = await s.scalar(
-            select(SourceItem).where(SourceItem.id == "DOC-sop-reimbursement")
-        )
+        item = await s.scalar(select(SourceItem).where(SourceItem.id == "DOC-sop-reimbursement"))
         assert item.version == 2
         chain = await audit.verify_chain(s)
         assert chain.ok
@@ -311,9 +295,7 @@ async def test_grant_expiration(hitl_env):
 
     # Manually expire it by setting expires_at in the past
     async with tenant_session(tenant_id) as s:
-        req = await s.scalar(
-            select(AccessRequest).where(AccessRequest.id == uuid.UUID(req_id))
-        )
+        req = await s.scalar(select(AccessRequest).where(AccessRequest.id == uuid.UUID(req_id)))
         req.expires_at = datetime.now(UTC) - timedelta(hours=1)
 
     # Trigger expire-grants endpoint
@@ -323,7 +305,5 @@ async def test_grant_expiration(hitl_env):
 
     # Verify status changed to expired
     async with tenant_session(tenant_id) as s:
-        req = await s.scalar(
-            select(AccessRequest).where(AccessRequest.id == uuid.UUID(req_id))
-        )
+        req = await s.scalar(select(AccessRequest).where(AccessRequest.id == uuid.UUID(req_id)))
         assert req.status == "expired"

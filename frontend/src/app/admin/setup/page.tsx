@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AnimatePresence, LayoutGroup, motion } from "framer-motion";
 import { Building2, Check, Copy, FileText, FlaskConical, Lock, Plug, Send, Sparkles, UserCog, Users, X } from "lucide-react";
 import { Shell } from "@/components/Shell";
@@ -13,6 +13,7 @@ import { RoleTest } from "@/components/wizard/RoleTest";
 import { toast } from "@/components/ui/Toast";
 import { newWizard, useSession, useTenants, type WContainer, type Wizard } from "@/store/session";
 import { INDUSTRIES } from "@/mock/admin";
+import { apiFetch } from "@/lib/api";
 import { useL } from "@/lib/i18n";
 
 const STEPS: { id: string; en: string; icon: React.ReactNode }[] = [
@@ -38,8 +39,11 @@ export default function Setup() {
   const stored = useSession((s) => s.wizards[tid]);
   const patchWizard = useSession((s) => s.patchWizard);
   const tenant = useTenants().find((t) => t.id === tid);
-  const code = useSession((s) => s.customTenants.find((t) => t.id === tid)?.code) ?? "SRN-4821";
-  const w: Wizard = stored ?? newWizard(tid);
+  const [code, setCode] = useState("…");
+  useEffect(() => {
+    apiFetch<{ join_code: string }>("/api/admin/join-code").then((r) => setCode(r.join_code)).catch(() => setCode("—"));
+  }, [tid]);
+  const w: Wizard = stored ?? newWizard();
   const patch = (p: Partial<Wizard>) => patchWizard(tid, p);
   const [err, setErr] = useState("");
   const [roleDraft, setRoleDraft] = useState("");
@@ -52,11 +56,11 @@ export default function Setup() {
     go(n + 1);
   };
   const addContainers = (cs: WContainer[]) => {
-    const c = useSession.getState().wizards[tid] ?? newWizard(tid);
+    const c = useSession.getState().wizards[tid] ?? newWizard();
     patchWizard(tid, { containers: [...c.containers, ...cs.filter((x) => !c.containers.some((y) => y.name === x.name))] });
   };
   function addNames(names: string[]) {
-    const c = useSession.getState().wizards[tid] ?? newWizard(tid);
+    const c = useSession.getState().wizards[tid] ?? newWizard();
     const at = Date.now();
     patchWizard(tid, { docs: [...c.docs, ...names.map((name, i) => ({ name, status: "ingesting" as const, at: at + i * 250 }))] });
     addContainers(names.map((n) => ({ name: `Upload: ${n}`, source: "Upload", tier: "hidden", roles: [] })));
@@ -93,6 +97,10 @@ export default function Setup() {
 
   return (
     <Shell title={l("Wizard setup perusahaan", "Company setup wizard")}>
+      <p role="note" className="text-sm p-3 mb-4 rounded-erp border border-warn/40 bg-warn/10 text-warn">
+        {l("Wizard ini panduan langkah demi langkah dan menyimpan draf di browser. Pengaturan yang berlaku diatur di halaman Admin (Container, Undangan, Topik, PII, Unggah).",
+          "This wizard is a guided walkthrough that keeps a draft in your browser. The settings that take effect live on the Admin pages (Containers, Invites, Topics, PII, Upload).")}
+      </p>
       {/* stepper */}
       <div className="card p-4 mb-6 overflow-x-auto">
         <ol className="flex items-start min-w-max mx-auto w-fit" aria-label={l("Langkah setup", "Setup steps")}>

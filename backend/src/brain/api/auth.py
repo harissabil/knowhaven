@@ -14,6 +14,7 @@ from brain.auth.sessions import (
 )
 from brain.db.models import User
 from brain.db.session import global_session, tenant_session
+from brain.hitl.approvers import is_approver
 from brain.rbac.context import load_context
 from brain.security import hash_password, verify_password
 from brain.tenancy.service import list_my_memberships
@@ -29,7 +30,7 @@ class RegisterIn(BaseModel):
 
 
 class LoginIn(BaseModel):
-    email: str = Field(min_length=1, max_length=200)
+    email: EmailStr
     password: str
 
 
@@ -45,6 +46,7 @@ class ActiveTenantOut(BaseModel):
     status: str
     roles: list[str]
     permission_version: int
+    can_approve: bool  # admin, manager, topic owner or container owner (12.3): shows Approvals
 
 
 class MeOut(BaseModel):
@@ -52,12 +54,11 @@ class MeOut(BaseModel):
     email: str
     name: str
     csrf_token: str
-    session_token: str | None = None
     active_tenant: ActiveTenantOut | None
     memberships: list[MembershipOut]
 
 
-async def build_me(auth: AuthSession, session_token: str | None = None) -> MeOut:
+async def build_me(auth: AuthSession) -> MeOut:
     async with global_session() as s:
         memberships = await list_my_memberships(s, auth.user_id)
     active = None
@@ -72,13 +73,13 @@ async def build_me(auth: AuthSession, session_token: str | None = None) -> MeOut
                 status=ctx.membership_status,
                 roles=sorted(ctx.role_keys),
                 permission_version=ctx.permission_version,
+                can_approve=ctx.is_active and await is_approver(s, ctx),
             )
     return MeOut(
         user_id=str(auth.user_id),
         email=auth.email,
         name=auth.name,
         csrf_token=auth.csrf_token,
-        session_token=session_token,
         active_tenant=active,
         memberships=[
             MembershipOut(tenant_id=str(m.tenant_id), tenant_name=m.tenant_name, status=m.status)
@@ -94,7 +95,7 @@ async def _login(response: Response, user_id) -> MeOut:
         token = await create_session(s, user_id, first)
         auth = await get_session(s, token)
     set_cookie(response, token)
-    return await build_me(auth, session_token=token)
+    return await build_me(auth)
 
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
@@ -115,30 +116,11 @@ async def register(body: RegisterIn, response: Response) -> MeOut:
 
 @router.post("/login")
 async def login(body: LoginIn, response: Response) -> MeOut:
-    raw_ident = body.email.strip()
-    ident = raw_ident.lower()
     async with global_session() as s:
-        user = await s.scalar(select(User).where(func.lower(User.email) == ident))
-        if user is None and "@" not in ident:
-            user = await s.scalar(
-                select(User)
-                .where(
-                    (func.lower(User.email).like(f"{ident}@%"))
-                    | (func.lower(User.email).like(f"{ident}.%@%"))
-                )
-                .order_by(User.created_at)
-            )
-    is_valid = verify_password(user.password_hash if user else None, body.password)
-    if not is_valid and user:
-        user_prefix = user.email.partition("@")[0].partition(".")[0].lower()
-        if body.password in (
-            f"demo-{user_prefix}",
-            "demo-pending",
-            "Demo-SRN-2026!",
-            "Demo-Konsultan-2026!",
-        ):
-            is_valid = True
-    if not is_valid or user is None:
+        user = await s.scalar(select(User).where(func.lower(User.email) == body.email.lower()))
+    # Same error and (via a dummy hash) similar timing for unknown email and wrong password.
+    # No name-prefix lookup and no shared demo passwords: identity is email + that user's password.
+    if not verify_password(user.password_hash if user else None, body.password):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid_credentials")
     return await _login(response, user.id)
 

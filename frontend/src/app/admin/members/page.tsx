@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, errorText } from "@/lib/api";
+import type { MemberOut, RoleOut } from "@/lib/contracts";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -35,122 +36,9 @@ export interface MemberItem {
   slackUser?: string;
 }
 
-// Initial mock data based on System Design Doc §4.1, §6.1, and §21.2 (SRN tenant)
-const INITIAL_MEMBERS: MemberItem[] = [
-  {
-    id: "admin",
-    name: "Admin SRN",
-    email: "admin@srn-nusantara.co.id",
-    department: "Direksi & IT",
-    title: "Owner & System Admin",
-    roles: ["owner", "admin"],
-    status: "active",
-    joinedAt: "2026-08-01",
-    slackUser: "@admin",
-  },
-  {
-    id: "dimas",
-    name: "Dimas Pratama",
-    email: "dimas.pratama@srn-nusantara.co.id",
-    department: "Operasional & Gudang",
-    title: "Karyawan Baru",
-    roles: ["new_hire", "staff"],
-    status: "active",
-    joinedAt: "2026-10-15",
-    slackUser: "@dimas",
-  },
-  {
-    id: "rina",
-    name: "Rina Wulandari",
-    email: "rina.w@srn-nusantara.co.id",
-    department: "Operasional & Gudang",
-    title: "Staf Ops Makassar",
-    roles: ["staff", "ops"],
-    status: "active",
-    joinedAt: "2026-08-10",
-    slackUser: "@rina",
-  },
-  {
-    id: "andi",
-    name: "Andi Saputra",
-    email: "andi.saputra@srn-nusantara.co.id",
-    department: "Proyek & IT",
-    title: "Project Manager",
-    roles: ["project_mgr"],
-    status: "active",
-    joinedAt: "2026-08-05",
-    slackUser: "@andi",
-  },
-  {
-    id: "sari",
-    name: "Sari Kusuma",
-    email: "sari.kusuma@srn-nusantara.co.id",
-    department: "HR & People",
-    title: "HR Specialist & Policy Owner",
-    roles: ["hr"],
-    status: "active",
-    joinedAt: "2026-08-01",
-    slackUser: "@sari",
-  },
-  {
-    id: "budi",
-    name: "Budi Hartono",
-    email: "budi.hartono@srn-nusantara.co.id",
-    department: "Operasional & Gudang",
-    title: "Manajer Operasional & Approver",
-    roles: ["ops", "approver"],
-    status: "active",
-    joinedAt: "2026-08-01",
-    slackUser: "@budi.ops",
-  },
-  {
-    id: "lina",
-    name: "Lina Marpaung",
-    email: "lina.marpaung@srn-nusantara.co.id",
-    department: "Audit & Kepatuhan",
-    title: "Auditor Kepatuhan Internal",
-    roles: ["auditor"],
-    status: "active",
-    joinedAt: "2026-08-12",
-    slackUser: "@lina",
-  },
-  {
-    id: "yoga",
-    name: "Yoga Prasetyo",
-    email: "yoga.consulting@gmail.com",
-    department: "Konsultan Eksternal",
-    title: "Konsultan Rantai Pasok",
-    roles: ["staff"],
-    status: "active",
-    joinedAt: "2026-09-01",
-    slackUser: "@yoga",
-  },
-  {
-    id: "pending-1",
-    name: "Eko Kurniawan",
-    email: "eko.k@srn-nusantara.co.id",
-    department: "Gudang Surabaya",
-    title: "Calon Staf Gudang (via Kode SRN-4821)",
-    roles: [],
-    status: "pending",
-    joinedAt: "2026-10-24",
-    slackUser: "@eko",
-  },
-  {
-    id: "pending-2",
-    name: "Dewi Anggraini",
-    email: "dewi.finance@srn-nusantara.co.id",
-    department: "Keuangan & Akuntansi",
-    title: "Analis Keuangan (via Kode SRN-4821)",
-    roles: [],
-    status: "pending",
-    joinedAt: "2026-10-24",
-    slackUser: "@dewi",
-  },
-];
-
 // Available roles categorized according to System Design Doc §4.1
-const BUSINESS_ROLES = [
+// Friendly labels for the default role keys; any other role shows its own name (doc §4.1).
+const ROLE_INFO: Record<string, { label: { id: string; en: string }; desc: { id: string; en: string } }> = Object.fromEntries([
   { key: "staff", label: { id: "Staf", en: "Staff" }, desc: { id: "Akses informasi umum perusahaan", en: "General company access" } },
   { key: "new_hire", label: { id: "Karyawan Baru", en: "New Hire" }, desc: { id: "Akses panduan onboarding & fasilitas", en: "Onboarding and benefits access" } },
   { key: "ops", label: { id: "Operasional & Gudang", en: "Operations" }, desc: { id: "Akses logistik, cabang, dan distribusi", en: "Logistics and branch distribution" } },
@@ -158,14 +46,11 @@ const BUSINESS_ROLES = [
   { key: "project_mgr", label: { id: "Project Manager", en: "Project Manager" }, desc: { id: "Akses riwayat proyek & inisiatif khusus", en: "Project history and confidential initiatives" } },
   { key: "finance", label: { id: "Keuangan", en: "Finance" }, desc: { id: "Akses grade gaji & anggaran cabang", en: "Salary grades and branch budgets" } },
   { key: "director", label: { id: "Direksi", en: "Director" }, desc: { id: "Akses strategis menyeluruh", en: "Broad executive access" } },
-];
-
-const SYSTEM_ROLES = [
   { key: "owner", label: { id: "Owner", en: "Owner" }, desc: { id: "Pemilik tenant (akses kontrol penuh)", en: "Tenant owner (full admin rights)" } },
-  { key: "admin", label: { id: "Admin", en: "Admin" }, desc: { id: "Konfigurasi RBAC, container & integrasi", en: "RBAC, containers & integrations config" } },
+  { key: "admin", label: { id: "Admin", en: "Admin" }, desc: { id: "Konfigurasi RBAC, container & integrasi; tidak memberi akses konten", en: "RBAC, containers & integrations config; grants no content" } },
   { key: "auditor", label: { id: "Auditor", en: "Auditor" }, desc: { id: "Hak melihat audit log & trace penuh", en: "View full audit log & execution traces" } },
-  { key: "approver", label: { id: "Approver (Fungsi)", en: "Approver" }, desc: { id: "Menyetujui permintaan akses & draf aksi", en: "Approve access requests & action drafts" } },
-];
+].map(({ key, ...v }) => [key, v]));
+
 
 const hash = (s: string) => [...s].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7);
 const hueOf = (s: string) => [14, 28, 160, 200, 262, 330][hash(s) % 6];
@@ -174,46 +59,43 @@ export default function Members() {
   const t = useT();
   const l = useL();
   const lang = useSession((s) => s.lang);
-  const [members, setMembers] = useState<MemberItem[]>(INITIAL_MEMBERS);
+  const [members, setMembers] = useState<MemberItem[]>([]);
+  const [roles, setRoles] = useState<RoleOut[]>([]);
+  const [loadErr, setLoadErr] = useState("");
   const [filter, setFilter] = useState<"all" | "active" | "pending" | "removed">("all");
   const [search, setSearch] = useState("");
 
-  useEffect(() => {
-    async function loadMembers() {
-      try {
-        const res = await apiFetch<
-          {
-            id: string;
-            name: string;
-            email: string;
-            title?: string;
-            department?: string;
-            roles: string[];
-            status: string;
-            created_at: string;
-          }[]
-        >("/api/admin/members");
-        if (res && res.length > 0) {
-          setMembers(
-            res.map((m) => ({
-              id: m.id,
-              name: m.name,
-              email: m.email,
-              department: m.department || "Operasional & Gudang",
-              title: m.title || m.roles.join(", "),
-              roles: m.roles,
-              status: (m.status === "suspended" ? "removed" : m.status) as "active" | "pending" | "removed",
-              joinedAt: m.created_at ? m.created_at.split("T")[0] : "2026-10-24",
-              slackUser: `@${m.name.toLowerCase().replace(/[^a-z0-9]/g, "")}`,
-            })),
-          );
-        }
-      } catch {
-        // fallback to initial mock
-      }
+  async function loadMembers() {
+    try {
+      const [res, rs] = await Promise.all([apiFetch<MemberOut[]>("/api/admin/members"), apiFetch<RoleOut[]>("/api/admin/roles")]);
+      setRoles(rs);
+      setMembers(
+        res.map((m) => ({
+          id: m.user_id,
+          name: m.name,
+          email: m.email,
+          department: m.department || "—",
+          title: m.title || "",
+          roles: m.roles,
+          status: m.status === "pending" ? "pending" : "active",
+          joinedAt: m.joined_at.split("T")[0],
+        })),
+      );
+    } catch (e) {
+      setLoadErr(errorText(e));
     }
-    loadMembers();
-  }, []);
+  }
+  useEffect(() => { loadMembers(); }, []);
+
+  const roleOpt = (r: RoleOut) => ({
+    key: r.key,
+    label: ROLE_INFO[r.key]?.label ?? { id: r.name, en: r.name },
+    desc: ROLE_INFO[r.key]?.desc ?? { id: r.name, en: r.name },
+  });
+  const BUSINESS_ROLES = roles.filter((r) => !r.is_system).map(roleOpt);
+  const SYSTEM_ROLES = roles.filter((r) => r.is_system).map(roleOpt);
+  const roleIds = (keys: string[]) => keys.map((k) => roles.find((r) => r.key === k)?.id).filter(Boolean) as string[];
+  const fail = (e: unknown) => toast(l(`Gagal: ${errorText(e)}`, `Failed: ${errorText(e)}`));
 
   // Modals state
   const [selectedMember, setSelectedMember] = useState<MemberItem | null>(null);
@@ -242,7 +124,7 @@ export default function Members() {
   // Open modal handlers
   const handleOpenApprove = (m: MemberItem) => {
     setSelectedMember(m);
-    setSelectedRoles(["staff"]); // default suggested role
+    setSelectedRoles(["staff"]); // default suggested role (a key that does not exist is ignored)
     setModalMode("approve");
   };
 
@@ -272,16 +154,12 @@ export default function Members() {
     }
 
     try {
-      await apiFetch(`/api/admin/members/${selectedMember.id}/status`, {
+      await apiFetch(`/api/admin/members/${selectedMember.id}/approve`, {
         method: "POST",
-        body: JSON.stringify({ status: "active" }),
+        body: JSON.stringify({ role_ids: roleIds(selectedRoles) }),
       });
-      await apiFetch(`/api/admin/members/${selectedMember.id}/roles`, {
-        method: "PATCH",
-        body: JSON.stringify({ roles: selectedRoles }),
-      });
-    } catch {
-      // offline/demo fallback
+    } catch (e) {
+      return fail(e);
     }
 
     setMembers((prev) =>
@@ -300,12 +178,9 @@ export default function Members() {
 
   const handleReject = async (m: MemberItem) => {
     try {
-      await apiFetch(`/api/admin/members/${m.id}/status`, {
-        method: "POST",
-        body: JSON.stringify({ status: "suspended" }),
-      });
-    } catch {
-      // offline fallback
+      await apiFetch(`/api/admin/members/${m.id}/reject`, { method: "POST" });
+    } catch (e) {
+      return fail(e);
     }
     setMembers((prev) => prev.map((x) => (x.id === m.id ? { ...x, status: "removed" } : x)));
     toast(l(`Pendaftaran ${m.name} ditolak.`, `Application for ${m.name} was rejected.`));
@@ -320,11 +195,11 @@ export default function Members() {
 
     try {
       await apiFetch(`/api/admin/members/${selectedMember.id}/roles`, {
-        method: "PATCH",
-        body: JSON.stringify({ roles: selectedRoles }),
+        method: "PUT",
+        body: JSON.stringify({ roles: roleIds(selectedRoles).map((role_id) => ({ role_id })) }),
       });
-    } catch {
-      // offline fallback
+    } catch (e) {
+      return fail(e);
     }
 
     setMembers((prev) =>
@@ -343,12 +218,9 @@ export default function Members() {
     if (!selectedMember) return;
 
     try {
-      await apiFetch(`/api/admin/members/${selectedMember.id}/status`, {
-        method: "POST",
-        body: JSON.stringify({ status: "suspended" }),
-      });
-    } catch {
-      // offline fallback
+      await apiFetch(`/api/admin/members/${selectedMember.id}`, { method: "DELETE" });
+    } catch (e) {
+      return fail(e);
     }
 
     setMembers((prev) =>
@@ -363,22 +235,9 @@ export default function Members() {
     closeModal();
   };
 
-  const handleRestore = async (m: MemberItem) => {
-    try {
-      await apiFetch(`/api/admin/members/${m.id}/status`, {
-        method: "POST",
-        body: JSON.stringify({ status: "active" }),
-      });
-    } catch {
-      // offline fallback
-    }
-
-    setMembers((prev) =>
-      prev.map((x) =>
-        x.id === m.id ? { ...x, status: "active", roles: x.roles.length ? x.roles : ["staff"] } : x
-      )
-    );
-    toast(l(`${m.name} diaktifkan kembali.`, `${m.name} was restored.`));
+  // Removal deletes the membership server-side; coming back means a fresh invite (doc §4.4).
+  const handleRestore = (m: MemberItem) => {
+    toast(l(`Kirim undangan baru ke ${m.email} dari halaman Undangan.`, `Send ${m.email} a new invite from the Invites page.`));
   };
 
   const toggleRole = (r: string) => {
@@ -390,6 +249,7 @@ export default function Members() {
   return (
     <Shell title={t("members")}>
       <div className="flex flex-col gap-6 max-w-6xl">
+        {loadErr && <p role="alert" className="text-bad">{loadErr}</p>}
         {/* Top Summary Cards
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="card p-4 flex flex-col gap-1">

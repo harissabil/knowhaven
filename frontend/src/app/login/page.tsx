@@ -3,22 +3,28 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { usePersonas, useSession, type CurrentUser } from "@/store/session";
-import { PERSONAS as DEMO } from "@/mock/users";
+import { useSession } from "@/store/session";
 import { useL, useT } from "@/lib/i18n";
 import { Mascot, SpeechBubble } from "@/components/mascot/Mascot";
-import { apiFetch, ApiError } from "@/lib/api";
+import { ApiError, errorText } from "@/lib/api";
 
-const TITLES: Record<string, string> = {
-  "Karyawan Baru": "New Hire", "Staf Ops Makassar": "Makassar Ops Staff", "Project Manager": "Project Manager", HR: "HR",
-  "Manajer Operasional": "Operations Manager", Auditor: "Auditor", Owner: "Owner", Konsultan: "Consultant",
-  "Menunggu persetujuan": "Awaiting approval",
-};
+// Seeded demo accounts (backend/seed/*/manifest.json). Shown on purpose (doc §14.3); these are
+// ordinary per-user passwords, there is no shared master password.
+const DEMO: { email: string; password: string; id: string; en: string }[] = [
+  { email: "dimas@srn-demo.id", password: "Demo-SRN-2026!", id: "Karyawan baru · SRN", en: "New hire · SRN" },
+  { email: "rina@srn-demo.id", password: "Demo-SRN-2026!", id: "Staf ops Makassar · SRN", en: "Makassar ops staff · SRN" },
+  { email: "andi@srn-demo.id", password: "Demo-SRN-2026!", id: "Project manager · SRN", en: "Project manager · SRN" },
+  { email: "sari@srn-demo.id", password: "Demo-SRN-2026!", id: "HR · SRN", en: "HR · SRN" },
+  { email: "budi.hartono@srn-demo.id", password: "Demo-SRN-2026!", id: "Manajer operasional · SRN", en: "Operations manager · SRN" },
+  { email: "lina@srn-demo.id", password: "Demo-SRN-2026!", id: "Auditor · SRN", en: "Auditor · SRN" },
+  { email: "admin@srn-demo.id", password: "Demo-SRN-2026!", id: "Owner/Admin · SRN", en: "Owner/Admin · SRN" },
+  { email: "yoga@konsultan-demo.id", password: "Demo-Konsultan-2026!", id: "Konsultan · SRN + KLM", en: "Consultant · SRN + KLM" },
+  { email: "harjo@klm-demo.id", password: "Demo-KLM-2026!", id: "Owner · KLM", en: "Owner · KLM" },
+];
 
 export default function Login() {
   const router = useRouter();
-  const { login, lang, set, syncMe } = useSession();
-  const PERSONAS = usePersonas();
+  const { login, lang, set } = useSession();
   const t = useT();
   const l = useL();
   const [email, setEmail] = useState("");
@@ -30,60 +36,18 @@ export default function Login() {
     e.preventDefault();
     setErr("");
     setLoading(true);
-
-    const inputAccount = email.trim().toLowerCase();
-
     try {
-      // 1. Try real backend login
-      const res = await apiFetch<{
-        session_token?: string;
-        user_id?: string;
-        active_tenant_id?: string;
-        roles?: string[];
-      }>("/api/auth/login", {
-        method: "POST",
-        body: JSON.stringify({ email: inputAccount, password: pw }),
-      });
-
-      if (res?.session_token) {
-        set({ sessionToken: res.session_token });
-      }
-
-      // Fetch full profile from /api/me
-      const me = await syncMe();
-      if (me) {
-        login(inputAccount, res.session_token, me as CurrentUser);
-        const roles = me.roles || [];
-        if (roles.length === 1 && roles[0] === "pending") {
-          router.push("/pending");
-        } else if (!me.tenants || me.tenants.length === 0) {
-          router.push("/onboarding");
-        } else {
-          router.push("/chat");
-        }
-        return;
-      }
-    } catch (e: unknown) {
-      if (e instanceof ApiError && e.status === 401) {
-        setErr(l("Akun atau kata sandi salah.", "Wrong account or password."));
-        setLoading(false);
-        return;
-      }
-      // If backend is unreachable or returned another error, try fallback mock check
-      console.warn("Backend login failed, checking local personas fallback...", e);
-    }
-
-    // Fallback for mock/offline testing
-    const p = PERSONAS.find((x) => x.id === inputAccount && x.password === pw);
-    if (!p) {
-      setErr(l("Akun atau kata sandi salah.", "Wrong account or password."));
+      const me = await login(email, pw);
+      const active = me.active_tenant;
+      const next = new URLSearchParams(window.location.search).get("next");
+      if (next?.startsWith("/join/")) return router.push(next); // only same-site invite links
+      router.push(!me.memberships.length || !active ? "/onboarding" : active.status === "pending" ? "/pending" : "/chat");
+    } catch (x) {
+      setErr(x instanceof ApiError && (x.status === 401 || x.status === 422)
+        ? l("Email atau kata sandi salah.", "Wrong email or password.")
+        : l(`Server tidak bisa dihubungi: ${errorText(x)}`, `Could not reach the server: ${errorText(x)}`));
       setLoading(false);
-      return;
     }
-
-    login(p.id);
-    router.push(!p.memberships.length ? "/onboarding" : p.memberships[0].roles.includes("pending") ? "/pending" : "/chat");
-    setLoading(false);
   }
 
   return (
@@ -104,24 +68,25 @@ export default function Login() {
             <h1 className="text-3xl flex-1">{l("Masuk ke Knowhaven", "Sign in to Knowhaven")}</h1>
             <button type="button" className="btn" onClick={() => set({ lang: lang === "id" ? "en" : "id" })}>{lang === "id" ? "EN" : "ID"}</button>
           </div>
-          <label className="flex flex-col gap-1">{l("Akun", "Account")}
-            <input className="input" value={email} onChange={(e) => setEmail(e.target.value)} placeholder={l("mis. dimas", "e.g. dimas")} disabled={loading} /></label>
+          <label className="flex flex-col gap-1">Email
+            <input className="input" type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="dimas@srn-demo.id" disabled={loading} required /></label>
           <label className="flex flex-col gap-1">{l("Kata sandi", "Password")}
-            <input className="input" type="password" value={pw} onChange={(e) => setPw(e.target.value)} disabled={loading} /></label>
+            <input className="input" type="password" autoComplete="current-password" value={pw} onChange={(e) => setPw(e.target.value)} disabled={loading} required /></label>
           {err && <p role="alert" className="text-bad">{err}</p>}
           <button className="btn btn-primary btn-lg justify-center" disabled={loading}>
             {loading ? l("Memverifikasi…", "Verifying…") : t("login")}
           </button>
+          <p className="text-sm text-muted text-center">{l("Belum punya akun?", "No account yet?")} <Link className="underline text-fg" href="/onboarding">{l("Daftar", "Sign up")}</Link></p>
         </form>
         <div className="card p-5">
           <h2 className="eyebrow mb-2">{t("demoAccounts")}</h2>
           <table className="w-full text-sm">
             <tbody>
               {DEMO.map((p) => (
-                <tr key={p.id} className="border-t border-line">
-                  <td className="py-1"><b>{p.id}</b> <span className="text-muted">{lang === "id" ? p.title : TITLES[p.title] ?? p.title}</span></td>
+                <tr key={p.email} className="border-t border-line">
+                  <td className="py-1"><b>{p.email}</b> <span className="text-muted block">{lang === "id" ? p.id : p.en}</span></td>
                   <td className="font-mono">{p.password}</td>
-                  <td><button className="btn" onClick={() => { setEmail(p.id); setPw(p.password); }} disabled={loading}>{l("Isi", "Fill")}</button></td>
+                  <td><button type="button" className="btn" onClick={() => { setEmail(p.email); setPw(p.password); }} disabled={loading}>{l("Isi", "Fill")}</button></td>
                 </tr>
               ))}
             </tbody>

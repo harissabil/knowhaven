@@ -109,3 +109,18 @@ async def for_draft(
         if found:
             return found
     return await admins(s)
+
+
+async def is_approver(s: AsyncSession, ctx) -> bool:
+    """Could this member ever be asked to approve something here? (Shows the Approvals page.)"""
+    if ctx.role_keys & {"owner", "admin"}:
+        return True
+    uid = ctx.user_id
+    for q in (
+        select(Manager.id).where(Manager.manager_user_id == uid),
+        select(TopicOwner.topic_key).where(TopicOwner.owner_user_id == uid),
+        select(Container.id).where(Container.owner_user_id == uid),
+    ):
+        if await s.scalar(q.limit(1)) is not None:
+            return True
+    return False

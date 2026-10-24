@@ -14,24 +14,16 @@ CSRF_HEADER = "X-CSRF-Token"
 
 
 async def get_auth(request: Request) -> AuthSession:
+    """Session from the httpOnly cookie only; state-changing requests also need the CSRF header.
+    (The web app reaches the API through Next.js rewrites, so the cookie is first-party.)"""
     token = request.cookies.get(COOKIE_NAME)
-    is_bearer = False
-    if not token:
-        auth_hdr = request.headers.get("Authorization", "")
-        if auth_hdr.startswith("Bearer "):
-            token = auth_hdr.removeprefix("Bearer ").strip()
-            is_bearer = True
     auth = None
     if token:
         async with global_session() as s:
             auth = await get_session(s, token)
     if auth is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "not_authenticated")
-    if (
-        not is_bearer
-        and request.method in _UNSAFE
-        and request.headers.get(CSRF_HEADER) != auth.csrf_token
-    ):
+    if request.method in _UNSAFE and request.headers.get(CSRF_HEADER) != auth.csrf_token:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "csrf_failed")
     return auth
 
