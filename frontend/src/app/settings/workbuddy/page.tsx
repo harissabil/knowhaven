@@ -3,6 +3,7 @@ import { copyText } from "@/lib/clipboard";
 import { useCallback, useEffect, useState } from "react";
 import { KeyRound, Copy, Check, Trash2 } from "lucide-react";
 import { Shell } from "@/components/Shell";
+import { WorkBuddyLogo } from "@/components/BrandLogos";
 import { usePersona, useSession } from "@/store/session";
 import { useL, useT } from "@/lib/i18n";
 import { apiFetch, errorText } from "@/lib/api";
@@ -81,7 +82,7 @@ export default function WorkBuddy() {
     <Shell title={t("workbuddy")}>
       <div className="card p-6 flex flex-col gap-4 max-w-2xl">
         <div>
-          <h2 className="text-xl font-bold mb-1">WorkBuddy MCP</h2>
+          <div className="flex items-center gap-2.5 mb-1.5"><WorkBuddyLogo size={28} /><h2 className="text-xl font-bold">WorkBuddy MCP</h2></div>
           <p className="text-sm text-muted">
             {l("Token terikat ke", "The token is bound to")} <b className="text-fg">{persona?.name}</b>{" "}
             {l("di", "in")} <b className="text-fg">{tenantName}</b>.{" "}

@@ -97,7 +97,13 @@ async def create_token(body: TokenIn, ctx: Member) -> TokenCreated:
         s.add(t)
         await s.flush()
         await audit.membership_event(
-            s, ctx.tenant_id, ctx.user_id, "mcp_token.create", token_id=t.id, label=body.label
+            s,
+            ctx.tenant_id,
+            ctx.user_id,
+            "mcp_token.create",
+            channel="mcp",
+            token_id=t.id,
+            label=body.label,
         )
     return TokenCreated(**_out(t).model_dump(), token=raw, mcp_json=mcp_json(raw))
 
@@ -117,7 +123,7 @@ async def revoke_token(token_id: uuid.UUID, ctx: Member) -> None:
         if res.rowcount == 0:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "token_not_found")
         await audit.membership_event(
-            s, ctx.tenant_id, ctx.user_id, "mcp_token.revoke", token_id=token_id
+            s, ctx.tenant_id, ctx.user_id, "mcp_token.revoke", channel="mcp", token_id=token_id
         )
 
 

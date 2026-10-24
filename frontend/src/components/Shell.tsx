@@ -2,19 +2,20 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { MessageSquare, CheckSquare, Users, Shield, Plug, Upload, ScrollText, FlaskConical, KeyRound, LogOut, Settings, FolderOpen, UserPlus, UserCog, User, ChevronDown, BookOpen, EyeOff } from "lucide-react";
+import { MessageSquare, CheckSquare, Users, Shield, Plug, Upload, ScrollText, FlaskConical, LogOut, Settings, FolderOpen, UserPlus, UserCog, User, ChevronDown, BookOpen, EyeOff } from "lucide-react";
 import { useSession, usePersona, useTenants } from "@/store/session";
 import { can, NAV, NAV_SECTIONS } from "@/lib/permissions";
 import { motion } from "framer-motion";
 import { useL, useT, type Key } from "@/lib/i18n";
 import { RoleChip } from "@/components/Chip";
+import { WorkBuddyLogo } from "@/components/BrandLogos";
 import { Mascot } from "@/components/mascot/Mascot";
 import { Launcher, Palette } from "@/components/Extras";
 
 const ICON: Record<string, React.ReactNode> = {
   chat: <MessageSquare size={18} />, approvals: <CheckSquare size={18} />, members: <Users size={18} />,
   containers: <Shield size={18} />, integrations: <Plug size={18} />, upload: <Upload size={18} />,
-  audit: <ScrollText size={18} />, tests: <FlaskConical size={18} />, workbuddy: <KeyRound size={18} />,
+  audit: <ScrollText size={18} />, tests: <FlaskConical size={18} />, workbuddy: <WorkBuddyLogo size={18} />,
   settings: <Settings size={18} />, documents: <FolderOpen size={18} />,
   invites: <UserPlus size={18} />, managers: <UserCog size={18} />, topics: <BookOpen size={18} />, pii: <EyeOff size={18} />,
 };
