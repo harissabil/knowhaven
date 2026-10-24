@@ -1,112 +1,77 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Upload, CheckCircle2, AlertTriangle, FileText } from "lucide-react";
+import { Upload, CheckCircle2, AlertTriangle } from "lucide-react";
 import { Shell } from "@/components/Shell";
-import { CONTAINERS as MOCK_CONTAINERS } from "@/mock/ops";
 import { useL, useT } from "@/lib/i18n";
-import { apiFetch, getAuthHeaders } from "@/lib/api";
+import { apiFetch, errorText } from "@/lib/api";
+import type { ContainerOut, UploadOut } from "@/lib/contracts";
 import { toast } from "@/components/ui/Toast";
 
-interface UploadResult {
-  filename: string;
-  container: string;
-  chunksIndexed: number;
-  piiMasked: number;
-  injectionDetected: boolean;
-}
+// Only upload folders and WhatsApp groups accept files (backend api/uploads.py).
+const UPLOADABLE = ["upload_folder", "whatsapp_group"];
 
 export default function UploadPage() {
   const t = useT();
   const l = useL();
-  const [containers, setContainers] = useState<string[]>([]);
-  const [selectedContainer, setSelectedContainer] = useState("");
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [containers, setContainers] = useState<ContainerOut[]>([]);
+  const [loadErr, setLoadErr] = useState("");
+  const [selected, setSelected] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [title, setTitle] = useState("");
   const [uploading, setUploading] = useState(false);
-  const [result, setResult] = useState<UploadResult | null>(null);
+  const [err, setErr] = useState("");
+  const [result, setResult] = useState<(UploadOut & { filename: string; container: string }) | null>(null);
 
   useEffect(() => {
-    async function loadContainers() {
-      try {
-        const res = await apiFetch<{ name: string }[]>("/api/admin/containers");
-        if (res && res.length > 0) {
-          const names = res.map((c) => c.name);
-          setContainers(names);
-          setSelectedContainer(names[0]);
-          return;
-        }
-      } catch {
-        // ignore
-      }
-      const names = MOCK_CONTAINERS.map((c) => c.name);
-      setContainers(names);
-      setSelectedContainer(names[0] || "kebijakan-perusahaan");
-    }
-    loadContainers();
+    apiFetch<ContainerOut[]>("/api/admin/containers")
+      .then((res) => {
+        const ok = res.filter((c) => UPLOADABLE.includes(c.source));
+        setContainers(ok);
+        setSelected(ok[0]?.id ?? "");
+      })
+      .catch((e) => setLoadErr(errorText(e)));
   }, []);
 
   async function handleUpload() {
-    if (!selectedFile) return;
+    if (!file || !selected) return;
     setUploading(true);
     setResult(null);
-
-    const formData = new FormData();
-    formData.append("file", selectedFile);
-    formData.append("container_name", selectedContainer || containers[0] || "kebijakan-perusahaan");
-
+    setErr("");
+    const form = new FormData();
+    form.append("container_id", selected);
+    form.append("file", file);
+    if (title.trim()) form.append("title", title.trim());
     try {
-      const headers = getAuthHeaders() as Record<string, string>;
-      const res = await fetch("/api/admin/upload", {
-        method: "POST",
-        headers,
-        body: formData,
-        credentials: "include",
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        setResult({
-          filename: data.filename || selectedFile.name,
-          container: data.container || selectedContainer,
-          chunksIndexed: data.chunks_indexed ?? 3,
-          piiMasked: data.pii_entities_masked ?? 0,
-          injectionDetected: Boolean(data.injection_detected),
-        });
-        toast(l("File berhasil diunggah & di-embed!", "File successfully uploaded & embedded!"));
-        setUploading(false);
-        return;
-      }
-    } catch {
-      // ignore
+      const res = await apiFetch<UploadOut>("/api/uploads", { method: "POST", body: form });
+      setResult({ ...res, filename: file.name, container: containers.find((c) => c.id === selected)?.name ?? "" });
+      toast(l("File diunggah dan diindeks", "File uploaded and indexed"));
+    } catch (e) {
+      setErr(errorText(e));
+    } finally {
+      setUploading(false);
     }
-
-    // Mock fallback
-    setResult({
-      filename: selectedFile.name,
-      container: selectedContainer,
-      chunksIndexed: 4,
-      piiMasked: 1,
-      injectionDetected: selectedFile.name.toLowerCase().includes("injection"),
-    });
-    toast(l("File diproses (mode demo)", "File processed (demo mode)"));
-    setUploading(false);
   }
 
   return (
     <Shell title={t("upload")}>
       <div className="card p-6 flex flex-col gap-4 max-w-xl">
+        {loadErr && (
+          <p role="alert" className="text-bad text-sm">
+            {l("Daftar container tidak bisa dimuat (hanya admin): ", "Could not load containers (admins only): ")}{loadErr}
+          </p>
+        )}
         <label className="flex flex-col gap-1.5 font-medium text-sm">
           {l("Container tujuan", "Target container")}
-          <select
-            className="input"
-            value={selectedContainer}
-            onChange={(e) => setSelectedContainer(e.target.value)}
-          >
+          <select className="input" value={selected} onChange={(e) => setSelected(e.target.value)}>
             {containers.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
+              <option key={c.id} value={c.id}>{c.name} ({c.source === "whatsapp_group" ? "WhatsApp" : "Upload"}, {c.tier})</option>
             ))}
           </select>
+        </label>
+
+        <label className="flex flex-col gap-1.5 font-medium text-sm">
+          {l("Judul (opsional)", "Title (optional)")}
+          <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} />
         </label>
 
         <label className="flex flex-col gap-1.5 font-medium text-sm">
@@ -117,22 +82,19 @@ export default function UploadPage() {
           <input
             type="file"
             className="input file:mr-3 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-xs file:bg-surface2"
-            accept=".pdf,.docx,.doc,.txt,.md,.markdown"
+            accept=".pdf,.docx,.txt,.md,.markdown"
             onChange={(e) => {
-              setSelectedFile(e.target.files?.[0] || null);
+              setFile(e.target.files?.[0] || null);
               setResult(null);
             }}
           />
         </label>
 
-        <button
-          className="btn btn-primary w-fit mt-1"
-          disabled={!selectedFile || uploading}
-          onClick={handleUpload}
-        >
+        <button className="btn btn-primary w-fit mt-1" disabled={!file || !selected || uploading} onClick={handleUpload}>
           <Upload size={16} />
           {uploading ? l("Memproses file…", "Processing file…") : "Upload & Ingest"}
         </button>
+        {err && <p role="alert" className="text-bad text-sm">{err}</p>}
 
         {result && (
           <div className="mt-3 p-4 rounded-erp bg-surface2/60 border border-line flex flex-col gap-2 text-sm">
@@ -141,23 +103,16 @@ export default function UploadPage() {
               <span>{result.filename}</span>
             </div>
             <div className="text-xs text-muted flex flex-col gap-1 pl-6">
-              <p>
-                {l("Target container", "Target container")}: <b>{result.container}</b>
-              </p>
-              <p>
-                {l("Chunk diindeks", "Indexed chunks")}: <b>{result.chunksIndexed}</b>
-              </p>
-              <p>
-                {l("Entitas PII disamarkan", "PII entities masked")}: <b>{result.piiMasked}</b>
-              </p>
+              <p>{l("Container", "Container")}: <b>{result.container}</b></p>
+              <p>{l("Item baru / diperbarui / tidak berubah", "Items created / updated / unchanged")}: <b>{result.created} / {result.updated} / {result.unchanged}</b></p>
             </div>
-            {result.injectionDetected && (
+            {result.injection_flagged.length > 0 && (
               <div className="mt-1 flex items-center gap-1.5 text-xs text-warn bg-warn/10 p-2 rounded border border-warn/30">
                 <AlertTriangle size={14} />
                 <span>
                   {l(
-                    "Pola prompt injection terdeteksi dan dinetralisir dalam indexing.",
-                    "Prompt injection pattern detected and neutralized during indexing.",
+                    `Pola prompt injection terdeteksi di ${result.injection_flagged.length} item; ditandai dan tidak pernah dijalankan sebagai instruksi.`,
+                    `Prompt-injection pattern found in ${result.injection_flagged.length} item(s); flagged and never followed as instructions.`,
                   )}
                 </span>
               </div>

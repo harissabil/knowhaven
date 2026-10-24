@@ -96,7 +96,7 @@ const MARQUEE = [
 ];
 
 export default function Landing() {
-  const { lang, theme, set, personaId } = useSession();
+  const { lang, theme, set, currentUser } = useSession();
   const c = C[lang];
   const href = ["#features", "#try", "#how", "#trust"];
   const [ctaHover, setCtaHover] = useState(false);
@@ -116,7 +116,7 @@ export default function Landing() {
           <div className="flex-1" />
           <button className="btn !px-3" aria-label="theme" onClick={() => set({ theme: theme === "light" ? "dark" : "light" })}>{theme === "light" ? <Moon size={16} /> : <Sun size={16} />}</button>
           <button className="btn" onClick={() => set({ lang: lang === "id" ? "en" : "id" })}>{lang === "id" ? "EN" : "ID"}</button>
-          <Link href={personaId ? "/chat" : "/login"} className="btn hidden sm:inline-flex">{c.login}</Link>
+          <Link href={currentUser ? "/chat" : "/login"} className="btn hidden sm:inline-flex">{c.login}</Link>
           <Link href="/onboarding" className="btn btn-primary">{c.start}</Link>
         </div>
       </header>
