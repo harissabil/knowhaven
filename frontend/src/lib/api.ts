@@ -69,6 +69,8 @@ async function toError(response: Response): Promise<ApiError> {
       errorMsg = payload.detail;
     } else if (Array.isArray(payload?.detail) && payload.detail[0]?.msg) {
       errorMsg = payload.detail.map((d) => d.msg).join(", ");
+    } else if (payload?.detail && typeof (payload.detail as { message?: unknown }).message === "string") {
+      errorMsg = (payload.detail as { message: string }).message; // {reason, message} errors
     } else if (payload?.message) {
       errorMsg = payload.message;
     }
