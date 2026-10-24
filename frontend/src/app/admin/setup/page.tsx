@@ -66,6 +66,29 @@ export default function Setup() {
   const company = tenant?.name ?? tid;
   const hue = hueOf(company || "x");
 
+  const isStepFilled = () => {
+    switch (w.step) {
+      case 0:
+        return Boolean(w.industry && (w.industry !== "other" || w.industryOther?.trim()));
+      case 1:
+        return w.roles.length > 0;
+      case 2:
+        return w.docs.length > 0;
+      case 3:
+        return Object.values(w.integ ?? {}).some(Boolean);
+      case 4:
+        return w.containers.length > 0 && w.containers.some((c) => c.tier !== "hidden" || c.roles.length > 0);
+      case 5:
+        return Boolean(w.approver?.trim() || w.topicOwner?.trim() || w.fallback?.trim() || (w.pii && w.pii.length > 0));
+      case 6:
+        return Boolean(w.tested);
+      case 7:
+        return (w.invitees && w.invitees.length > 0) || (w.invites && w.invites.length > 0);
+      default:
+        return true;
+    }
+  };
+
   const next = () => finish(w.step);
 
   return (
@@ -144,7 +167,7 @@ export default function Setup() {
 
             {w.step === 1 && (
               <div className="flex flex-col gap-4">
-                <p className="text-sm text-muted">{l("Peran sistem (Owner, Admin, Auditor) tetap. Peran bisnis menentukan data yang boleh dilihat.", "System roles (Owner, Admin, Auditor) are fixed. Business roles decide what data can be seen.")}</p>
+                <p className="text-sm text-muted">{l("Peran sistem (Owner, Admin, Auditor) tetap. Peran bisnis menentukan data yang boleh dilihat.", "Business roles decide what data can be seen.")}</p>
                 <LayoutGroup>
                   <motion.div layout className="flex flex-wrap gap-2 min-h-[44px]">
                     <AnimatePresence>
@@ -216,7 +239,7 @@ export default function Setup() {
               <button className="btn" disabled={w.step === 0} onClick={() => go(w.step - 1)}>{l("Kembali", "Back")}</button>
               {w.step < 8 && (
                 <>
-                  <button className="btn btn-primary btn-lg" onClick={next}>{l("Simpan dan lanjut", "Save and continue")}</button>
+                  <button className="btn btn-primary btn-lg" disabled={!isStepFilled()} onClick={next}>{l("Simpan dan lanjut", "Save and continue")}</button>
                   {!REQUIRED.includes(w.step) && <button className="btn" onClick={() => finish(w.step, true)}>{l("Lewati", "Skip")}</button>}
                 </>
               )}

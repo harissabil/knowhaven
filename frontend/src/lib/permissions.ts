@@ -43,5 +43,6 @@ export const NAV: NavItem[] = [
   { href: "/admin/upload", id: "upload", cap: "upload" },
   { href: "/audit", id: "audit", cap: "audit" },
   { href: "/tests", id: "tests", cap: "tests" },
+  { href: "/settings", id: "settings" },
   { href: "/settings/workbuddy", id: "workbuddy", cap: "chat" },
 ];

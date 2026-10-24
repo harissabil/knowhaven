@@ -1,10 +1,10 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { motion } from "framer-motion";
 import { Send, ShieldAlert, Scale, FileText, MessageCircle, ListChecks } from "lucide-react";
 import { Shell } from "@/components/Shell";
 import { Mascot, type MascotState } from "@/components/mascot/Mascot";
-import { answerFor, SUGGESTIONS, TRACE_STEPS, type Answer, type Citation } from "@/mock/chat";
+import { answerFor, SUGGESTIONS, type Answer } from "@/mock/chat";
 import { useL, useT } from "@/lib/i18n";
 import { useSession } from "@/store/session";
 
@@ -34,110 +34,171 @@ export default function Chat() {
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [q, setQ] = useState("");
   const [state, setState] = useState<MascotState>("idle");
-  const [step, setStep] = useState(0);
-  const [cite, setCite] = useState<Citation | null>(null);
   const [requested, setRequested] = useState(false);
   const [streamDone, setStreamDone] = useState(true);
   const busy = useRef(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [msgs, streamDone, state]);
 
   async function ask(text: string) {
     if (!text.trim() || busy.current) return;
-    busy.current = true; setQ(""); setCite(null);
+    busy.current = true;
+    setQ("");
     const now = () => new Date().toLocaleTimeString(lang === "id" ? "id-ID" : "en-US");
     setMsgs((m) => [...m, { role: "user", text, at: now() }]);
-    setState("listening"); await sleep(400);
+    setState("listening");
+    await sleep(350);
     setState("thinking");
-    for (const s of TRACE_STEPS) { setStep(s.n); await sleep(350); }
+    await sleep(650);
     const a = answerFor(text, lang);
-    setState(a.state); setStep(0);
+    setState(a.state);
     setStreamDone(false);
     setMsgs((m) => [...m, { role: "bot", text: a.text, answer: a, at: now() }]);
     busy.current = false;
   }
 
   return (
-    <Shell title={t("chat")}>
-      <div className="grid lg:grid-cols-[1fr_320px] gap-4">
-        <section className="card p-4 flex flex-col gap-3 min-h-[60vh]">
-          {msgs.length === 0 && (
-            <div className="flex flex-col items-center gap-2 py-6">
-              <Mascot size={120} state={state} />
-              <p>{t("welcome")}</p>
-              <p className="text-sm text-muted">{t("suggestions")}:</p>
-              <div className="flex flex-wrap gap-2 justify-center">
-                {SUGGESTIONS[lang].map((s) => <button key={s} className="btn" onClick={() => ask(s)}>{s}</button>)}
+    <Shell fullBleed title={t("chat")}>
+      <div className="flex-1 flex flex-col h-full min-h-0 w-full bg-bg">
+        {/* Messages scroll area */}
+        <div className="flex-1 overflow-y-auto px-4 md:px-8 py-6 flex flex-col scroll-smooth">
+          <div className="max-w-4xl mx-auto w-full flex-1 flex flex-col gap-5">
+            {msgs.length === 0 && (
+              <div className="flex-1 flex flex-col items-center justify-center gap-3 py-16 text-center max-w-xl mx-auto my-auto">
+                <Mascot size={140} state={state} />
+                <p className="text-2xl font-semibold mt-2">{t("welcome")}</p>
+                <p className="text-sm text-muted">{t("suggestions")}:</p>
+                <div className="flex flex-wrap gap-2.5 justify-center mt-2">
+                  {SUGGESTIONS[lang].map((s) => (
+                    <button
+                      key={s}
+                      className="btn hover:border-brand hover:text-brand transition-colors text-sm py-2 px-3.5"
+                      onClick={() => ask(s)}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
-          {msgs.map((m, i) => {
-            const last = i === msgs.length - 1;
-            const reveal = !last || m.role === "user" || streamDone;
-            return (
-            <motion.div key={i} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className={`flex gap-2 ${m.role === "user" ? "justify-end" : ""}`}>
-              {m.role === "bot" && <Mascot size={48} state={m.answer?.state} />}
-              <div className={`max-w-[80%] p-3 rounded-erp ${m.role === "user" ? "bg-surface2 border border-line2" : "border border-line"}`}>
-                {m.role === "bot" && last && !streamDone ? <Stream text={m.text} onDone={() => setStreamDone(true)} /> : <p>{render(m.text)}</p>}
-                {reveal && <>
-                {m.answer?.conflict && (
-                  <p className="mt-2 flex gap-1 text-warn text-sm"><Scale size={16} /> {l("Konflik sumber", "Source conflict")}: {m.answer.conflict.reason}</p>
-                )}
-                {m.answer?.idkOwner && <p className="mt-2 text-sm">{l("Pemilik topik", "Topic owner")}: <b>{m.answer.idkOwner}</b></p>}
-                {m.answer?.canRequestAccess && (
-                  <button className="btn btn-primary mt-2" disabled={requested} onClick={() => { setRequested(true); setState("waiting"); }}>
-                    <ShieldAlert size={16} /> {requested ? l("Menunggu approver…", "Waiting for approver…") : t("requestAccess")}
-                  </button>
-                )}
-                {!!m.answer?.citations.length && (
-                  <div className="mt-2 flex flex-wrap gap-1">
-                    {m.answer.citations.map((c, n) => (
-                      <button key={c.id} className="btn !py-0.5 text-xs" onClick={() => setCite(c)}>
-                        [{n + 1}] {KIND_ICON[c.kind]} {c.id}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                <p className="text-xs text-muted mt-1">{t("dataAsOf")} {m.at}</p>
-                </>}
-              </div>
-            </motion.div>
-            );
-          })}
-          <div className="flex-1" />
-          <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); ask(q); }}>
-            <input className="input" value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("placeholder")} />
-            <button className="btn btn-primary"><Send size={16} /> {t("send")}</button>
-          </form>
-        </section>
+            )}
 
-        <aside className="flex flex-col gap-4">
-          <div className="card p-3">
-            <h2 className="font-semibold mb-2">{t("trace")}</h2>
-            <ol className="text-sm flex flex-col gap-1">
-              {TRACE_STEPS.map((s) => (
-                <li key={s.n} className={`flex gap-2 items-start transition-opacity ${step === 0 || step >= s.n ? "opacity-100" : "opacity-40"} ${step === s.n ? "font-semibold text-brand" : ""}`}>
-                  <span className="w-3 mt-1.5 shrink-0 grid place-items-center">
-                    {step === 0 ? <span className="w-1 h-1 rounded-full bg-muted" /> : step > s.n ? <span className="text-ok text-xs">✓</span>
-                      : step === s.n ? <motion.span className="w-2 h-2 rounded-full bg-brand" animate={{ scale: [1, 1.5, 1] }} transition={{ duration: 0.7, repeat: Infinity }} />
-                      : <span className="w-1 h-1 rounded-full bg-muted" />}
-                  </span>
-                  <span><code className="text-xs">[{s.kind}]</code> {s.name[lang]}</span>
-                </li>
-              ))}
-            </ol>
+            {msgs.map((m, i) => {
+              const last = i === msgs.length - 1;
+              const reveal = !last || m.role === "user" || streamDone;
+              return (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3 }}
+                  className={`flex gap-3.5 ${m.role === "user" ? "justify-end" : "justify-start"}`}
+                >
+                  {m.role === "bot" && (
+                    <div className="shrink-0 mt-0.5">
+                      <Mascot size={46} state={m.answer?.state} />
+                    </div>
+                  )}
+                  <div
+                    className={`max-w-[85%] md:max-w-[80%] p-4 rounded-erp shadow-xs ${
+                      m.role === "user" ? "bg-surface2 border border-line2" : "border border-line bg-surface"
+                    }`}
+                  >
+                    {m.role === "bot" && last && !streamDone ? (
+                      <Stream text={m.text} onDone={() => setStreamDone(true)} />
+                    ) : (
+                      <p className="leading-relaxed text-[0.98rem]">{render(m.text)}</p>
+                    )}
+
+                    {reveal && (
+                      <>
+                        {m.answer?.conflict && (
+                          <p className="mt-3 flex gap-1.5 text-warn text-sm">
+                            <Scale size={16} className="shrink-0 mt-0.5" />
+                            <span><b>{l("Konflik sumber", "Source conflict")}:</b> {m.answer.conflict.reason}</span>
+                          </p>
+                        )}
+                        {m.answer?.idkOwner && (
+                          <p className="mt-2 text-sm">
+                            {l("Pemilik topik", "Topic owner")}: <b>{m.answer.idkOwner}</b>
+                          </p>
+                        )}
+                        {m.answer?.canRequestAccess && (
+                          <button
+                            className="btn btn-primary mt-2.5"
+                            disabled={requested}
+                            onClick={() => {
+                              setRequested(true);
+                              setState("waiting");
+                            }}
+                          >
+                            <ShieldAlert size={16} />{" "}
+                            {requested ? l("Menunggu approver…", "Waiting for approver…") : t("requestAccess")}
+                          </button>
+                        )}
+                        {!!m.answer?.citations.length && (
+                          <div className="mt-3 pt-2 border-t border-line/60 flex flex-wrap items-center gap-1.5">
+                            <span className="text-xs text-muted mr-1">{t("sources")}:</span>
+                            {m.answer.citations.map((c, n) => (
+                              <a
+                                key={c.id}
+                                href={`/sources/${encodeURIComponent(c.id)}`}
+                                className="btn !py-1 !px-2.5 text-xs hover:border-brand inline-flex items-center gap-1.5"
+                                title={c.label}
+                              >
+                                [{n + 1}] {KIND_ICON[c.kind]} {c.id}
+                              </a>
+                            ))}
+                          </div>
+                        )}
+                        <p className="text-xs text-muted mt-2">{t("dataAsOf")} {m.at}</p>
+                      </>
+                    )}
+                  </div>
+                </motion.div>
+              );
+            })}
+
+            {state === "thinking" && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex gap-3 items-center text-sm text-muted py-2"
+              >
+                <Mascot size={38} state="thinking" />
+                <span className="animate-pulse">{l("Havi sedang berpikir…", "Havi is thinking…")}</span>
+              </motion.div>
+            )}
+
+            <div ref={messagesEndRef} />
           </div>
-          <div className="card p-3">
-            <h2 className="font-semibold mb-2">{t("sources")}</h2>
-            {cite ? (
-              <div className="text-sm">
-                <p className="font-mono">{cite.id}</p>
-                <p>{cite.label}</p>
-                {cite.note && <span className="text-warn">({cite.note})</span>}
-                <a className="btn mt-2" href={`/sources/${encodeURIComponent(cite.id)}`}>{l("Buka sumber", "Open source")}</a>
-                <p className="text-muted mt-2">{l("Izin dicek ulang saat sumber dibuka.", "Permissions are re-checked when a source is opened.")}</p>
-              </div>
-            ) : <p className="text-sm text-muted">{l("Klik sitasi untuk melihat sumber.", "Click a citation to view its source.")}</p>}
-          </div>
-        </aside>
+        </div>
+
+        {/* Input Bar pinned at the bottom */}
+        <div className="shrink-0 border-t border-line bg-surface/90 backdrop-blur-md px-4 md:px-8 py-3.5">
+          <form
+            className="max-w-4xl mx-auto flex gap-2.5"
+            onSubmit={(e) => {
+              e.preventDefault();
+              ask(q);
+            }}
+          >
+            <input
+              className="input flex-1 py-3 px-4 text-base rounded-full"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder={t("placeholder")}
+            />
+            <button
+              className="btn btn-primary btn-lg px-6 rounded-full"
+              disabled={busy.current || !q.trim()}
+            >
+              <Send size={18} /> {t("send")}
+            </button>
+          </form>
+        </div>
       </div>
     </Shell>
   );

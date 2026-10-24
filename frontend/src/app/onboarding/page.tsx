@@ -69,8 +69,8 @@ export default function Onboarding() {
     join: err ? l("Hmm, kode itu tidak saya kenal. Coba lagi?", "Hmm, I don't know that code. Try again?") : l("Masukkan kode dari admin Anda. Anda akan menunggu persetujuan.", "Enter the code from your admin. You'll wait for approval."),
     building: tick >= BUILD.length ? l("Selesai! Mari kita atur pengetahuannya.", "All set! Let's set up your knowledge.") : l("Sebentar ya, saya menyiapkan semuanya…", "One moment, getting everything ready…"),
   };
-  const dots = [l("Akun", "Account"), l("Perusahaan", "Company"), l("Luncurkan", "Launch")];
-  const dot = stage === "account" ? 0 : stage === "building" ? 2 : 1;
+  // const dots = [l("Akun", "Account"), l("Perusahaan", "Company"), l("Luncurkan", "Launch")];
+  // const dot = stage === "account" ? 0 : stage === "building" ? 2 : 1;
 
   return (
     <div className="min-h-screen grid lg:grid-cols-[1fr_1.1fr] relative">
@@ -90,7 +90,7 @@ export default function Onboarding() {
           <motion.div key={say[stage]} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
             className="card px-5 py-3 max-w-sm text-[1.02rem]">{say[stage]}</motion.div>
         </AnimatePresence>
-        <ol className="flex gap-6 absolute bottom-8">
+        {/*<ol className="flex gap-6 absolute bottom-8">
           {dots.map((d, i) => (
             <li key={d} className="flex items-center gap-2 eyebrow">
               <span className={`w-5 h-5 rounded-full grid place-items-center text-[10px] ${i < dot ? "bg-ok text-brandfg" : i === dot ? "bg-brand text-brandfg" : "border border-line2"}`}>
@@ -99,7 +99,7 @@ export default function Onboarding() {
               <span className={i === dot ? "text-fg" : ""}>{d}</span>
             </li>
           ))}
-        </ol>
+        </ol>*/}
       </div>
 
       {/* form side */}
