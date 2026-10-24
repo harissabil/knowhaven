@@ -32,6 +32,7 @@ from brain.agent.schemas import Evidence, Understanding
 from brain.audit import log as audit
 from brain.db.models import Conversation, IngestionEvent, Message, TraceEvent
 from brain.db.session import tenant_session
+from brain.hitl import drafts
 from brain.ingestion import pii
 from brain.llm.agno import agno_model
 from brain.llm.provider import GeminiProvider, LLMCall, get_llm
@@ -587,6 +588,12 @@ class _Run:
                                  started_at=x.started, ended_at=x.ended, summary_user=x.summary,
                                  detail_auditor=audit.jsonable(x.detail)))  # fmt: skip
             und = self.und
+            draft_ids = []
+            if decision == "conflict" and self.details.get("draft_candidates"):
+                draft_ids = await drafts.propose(
+                    s, ctx, self.query_id, self.details["draft_candidates"]
+                )
+                self.details["action_draft_ids"] = [str(d) for d in draft_ids]
             await audit.append(
                 s, ctx.tenant_id, "query", query_id=self.query_id, actor_user_id=ctx.user_id, channel=self.channel,
                 query_text=pii.mask_text(self.q, pol.company_domains)[0],
@@ -623,6 +630,7 @@ class _Run:
                 "stale_doc_ids": list(stale),
                 "access_offer": offer,
                 "notes": self.notes,
+                "action_draft_ids": [str(d) for d in draft_ids],
                 "data_as_of": data_as_of.isoformat()
                 if isinstance(data_as_of, datetime | date)
                 else None,

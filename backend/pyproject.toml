@@ -71,3 +71,4 @@ markers = ["live: calls the real Gemini API (skip with -m 'not live')"]
 "src/brain/api/audit.py" = ["E501"]
 "src/brain/mcp_server/*" = ["E501"]
 "src/brain/api/mcp_tokens.py" = ["E501"]  # user-facing instruction text
+"src/brain/hitl/*" = ["E501"]
