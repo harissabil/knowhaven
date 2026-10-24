@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { motion, useScroll, useSpring } from "framer-motion";
 import { ArrowRight, Moon, Sun } from "lucide-react";
 import { Mascot, type MascotState } from "@/components/mascot/Mascot";
-import { LOGOS } from "@/components/BrandLogos";
+import { KnowhavenLogo, LOGOS } from "@/components/BrandLogos";
 import { FlowScene } from "@/components/landing/FlowScene";
 import { RoleDemo } from "@/components/landing/RoleDemo";
 import { ProductTabs } from "@/components/landing/ProductTabs";
@@ -18,11 +18,11 @@ const C = {
   id: {
     nav: ["Fitur", "Coba sendiri", "Cara kerja", "Keamanan"],
     login: "Masuk", start: "Mulai Sekarang", demo: "Lihat demo",
-    pill: "Tencent Cloud Hackathon Indonesia 2026",
-    h1a: "Semua pengetahuan kantor.",
-    h1b: "Cukup sekali tanya.",
-    sub: "Jawaban instan lengkap dengan sumber dari chat, dokumen, dan task tim Anda, aman sesuai hak akses masing-masing.",
-    stats: [[8, "", "langkah verifikasi di setiap jawaban"], [0, "", "kebocoran data antar peran"], [10, "<", "detik sinkronisasi data baru"], [5, "", "sumber kerja terhubung sekaligus"]],
+    // pill: "Tencent Cloud Hackathon Indonesia 2026",
+    h1a: "Kami menyederhanakan pencarian informasi kantor.",
+    h1b: "Tanya sekali, semua terjawab.",
+    sub: "Tanya dalam Bahasa Indonesia, Inggris, atau campur. Havi menjawab dari chat, dokumen, dan task perusahaan Anda, lengkap dengan sumber, dan hanya dari data yang boleh Anda lihat.",
+    stats: [[8, "", "langkah pipeline, tiap langkah dicatat"], [0, "", "kebocoran pada uji diferensial"], [10, "<", "detik sampai pesan baru bisa dicari"], [5, "", "jenis sumber dalam satu jawaban"]],
     tryTitle: "Pertanyaan sama. Jawaban berbeda, sesuai siapa yang bertanya.",
     trySub: "Ganti peran dan lihat Havi menegakkan batas akses secara langsung. Topik rahasia tidak pernah bocor, bahkan lewat petunjuk.",
     prodTitle: "Satu tempat untuk bertanya, menyetujui, dan memeriksa.",
@@ -49,16 +49,16 @@ const C = {
     trustTitle: "Kode memutuskan. AI menjelaskan.",
     trust: "Hak akses, sensor data pribadi, dan keaslian sitasi dikunci oleh sistem, bukan tebakan AI. Model AI hanya merangkum dari sumber yang memang berhak Anda buka.",
     ctaTitle: "Berhenti mencari. Mulai bertanya.", ctaSub: "Siap dalam beberapa menit. Tanpa kartu kredit.",
-    foot: "Knowhaven. Dibuat untuk Tencent Cloud Hackathon Indonesia 2026.",
+    foot: "Knowhaven. Dibuat oleh Hokulele Software.",
   },
   en: {
     nav: ["Features", "Try it", "How it works", "Security"],
     login: "Sign in", start: "Start Now", demo: "See demo",
-    pill: "Tencent Cloud Hackathon Indonesia 2026",
-    h1a: "Your company's knowledge.",
-    h1b: "One question away.",
-    sub: "Instant, cited answers across your chats, docs, and tasks, strictly respecting who has access to what.",
-    stats: [[8, "", "verification steps per answer"], [0, "", "cross-role data leaks"], [10, "<", "seconds to index new updates"], [5, "", "workplace sources unified"]],
+    // pill: "Tencent Cloud Hackathon Indonesia 2026",
+    h1a: "We simplify finding information at work.",
+    h1b: "Ask once, get the answer.",
+    sub: "Ask in Indonesian, English, or both. Havi answers from your company's chats, documents, and tasks, with sources, and only from data you're allowed to see.",
+    stats: [[8, "", "pipeline steps, every one logged"], [0, "", "leaks in the differential test"], [10, "<", "seconds until a new message is searchable"], [5, "", "source types in a single answer"]],
     tryTitle: "Same question. Different answer, depending on who asks.",
     trySub: "Switch roles and watch Havi enforce access limits live. Restricted topics never leak, not even through hints.",
     prodTitle: "One place to ask, approve, and audit.",
@@ -85,7 +85,7 @@ const C = {
     trustTitle: "Code decides. AI explains.",
     trust: "Access control, PII masking, and citation checks are enforced by code, never left to AI guesswork. The model only summarizes sources you're already cleared to read.",
     ctaTitle: "Stop searching. Start asking.", ctaSub: "Ready in minutes. No credit card.",
-    foot: "Knowhaven. Built for Tencent Cloud Hackathon Indonesia 2026.",
+    foot: "Knowhaven. Developed by Hokulele Software.",
   },
 };
 
@@ -109,7 +109,7 @@ export default function Landing() {
     <div className="min-h-screen overflow-x-clip">
       <header className="sticky top-0 z-20 bg-bg/80 backdrop-blur-md border-b border-line">
         <div className="max-w-6xl mx-auto flex items-center gap-5 px-5 h-16">
-          <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight text-lg"><Mascot size={34} /> Knowhaven</Link>
+          <Link href="/" className="flex items-center gap-2.5 font-semibold tracking-tight text-lg"><KnowhavenLogo size={28} /> Knowhaven</Link>
           <nav className="hidden lg:flex gap-1 ml-4 text-sm">
             {c.nav.map((n, i) => <a key={n} href={href[i]} className="px-3 py-1.5 rounded-full text-muted hover:text-fg hover:bg-surface2 transition-colors">{n}</a>)}
           </nav>
@@ -122,14 +122,14 @@ export default function Landing() {
       </header>
 
       {/* HERO */}
-      <section className="relative min-h-[calc(100vh-4rem)] flex flex-col justify-center">
-        <div aria-hidden className="absolute inset-x-0 top-0 h-full -z-10"
-          style={{ background: "radial-gradient(65% 65% at 50% 25%, var(--brand-tint), transparent 75%)" }} />
-        <div className="max-w-5xl w-full mx-auto px-5 py-10 flex flex-col items-center text-center gap-6">
-          <motion.span initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+      <section className="relative">
+        <div aria-hidden className="absolute inset-x-0 top-0 h-[560px] -z-10"
+          style={{ background: "radial-gradient(60% 70% at 50% 0%, var(--brand-tint), transparent 70%)" }} />
+        <div className="max-w-5xl mx-auto px-5 pt-16 pb-6 flex flex-col items-center text-center gap-7">
+          {/* <motion.span initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
             className="btn !py-1 !px-3 text-sm !border-line cursor-default">
             <span className="w-1.5 h-1.5 rounded-full bg-brand animate-pulse" /> {c.pill}
-          </motion.span>
+          </motion.span> */}
           <motion.h1 initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08, duration: 0.6 }}
             className="halo text-5xl md:text-7xl leading-[1.04] max-w-[900px]">
             {c.h1a} <span className="block text-brand mt-1">{c.h1b}</span>

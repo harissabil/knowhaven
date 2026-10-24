@@ -3,7 +3,7 @@
 import pytest
 
 from brain.ingestion.injection import detect_injection
-from brain.ingestion.pii import detect, mask_text
+from brain.ingestion.pii import detect, mask_except, mask_text
 
 CO = frozenset({"srn.co.id"})
 
@@ -18,6 +18,7 @@ CO = frozenset({"srn.co.id"})
             "email pribadi r***@gmail.com, kantor rina@srn.co.id",
         ),
         ("NPWP 12.345.678.9-012.345", "NPWP 12.***.***.*-***.345"),
+        ("NPWP: 123456789012345", "NPWP: 12**********345"),
         ("transfer ke rek BCA 1234567890 a.n. Budi", "transfer ke rek BCA ******7890 a.n. Budi"),
         ("no. rekening: 0987 6543 2109", "no. rekening: ********2109"),
     ],
@@ -25,6 +26,33 @@ CO = frozenset({"srn.co.id"})
 def test_masking(text, expected):
     masked, spans = mask_text(text, CO)
     assert masked == expected and spans
+
+
+def test_partial_pii_permissions_mask_only_disabled_types():
+    raw = (
+        "Nama: Rina Wulandari | NIK: 3201234501900001 | NPWP: 12.345.678.9-012.345 | "
+        "HP: 0812-3456-7890 | Email: rina.w@gmail.com | Rek BCA: 1234567890"
+    )
+    out, revealed = mask_except(raw, frozenset({"nik", "npwp"}), CO)
+    assert revealed is True
+    assert "3201234501900001" in out
+    assert "12.345.678.9-012.345" in out
+    assert "0812****7890" in out
+    assert "r***@gmail.com" in out
+    assert "******7890" in out
+    assert "0812-3456-7890" not in out
+    assert "rina.w@gmail.com" not in out
+    assert "1234567890" not in out
+
+
+def test_bank_keyword_does_not_bleed_across_separator_into_nik_or_npwp():
+    text = "Bank BCA, NIK: 3201234501900001, NPWP: 123456789012345"
+    spans = detect(text)
+    assert [s.type for s in spans] == ["nik", "npwp"]
+    out, revealed = mask_except(text, frozenset({"nik", "npwp"}))
+    assert revealed is True
+    assert "3201234501900001" in out
+    assert "123456789012345" in out
 
 
 def test_nik_validation_rejects_impossible_numbers():

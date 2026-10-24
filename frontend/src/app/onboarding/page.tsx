@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowRight, Building2, Check, Eye, EyeOff, KeyRound } from "lucide-react";
 import { Mascot, type MascotState } from "@/components/mascot/Mascot";
+import { KnowhavenLogo } from "@/components/BrandLogos";
 import { Confetti } from "@/components/ui/Confetti";
 import { Spot } from "@/components/ui/Spot";
 import { usePersona, useSession } from "@/store/session";
@@ -85,7 +86,7 @@ export default function Onboarding() {
       {/* scene */}
       <div className="relative hidden lg:flex flex-col items-center justify-center gap-7 p-10 text-center overflow-hidden border-r border-line bg-tint"
         style={{ backgroundImage: "radial-gradient(var(--border-strong) 1px, transparent 1px)", backgroundSize: "20px 20px" }}>
-        <Link href="/" className="absolute top-6 left-6 font-semibold text-lg tracking-tight">Knowhaven</Link>
+        <Link href="/" className="absolute top-6 left-6 flex items-center gap-2.5 font-semibold text-lg tracking-tight"><KnowhavenLogo size={26} /> Knowhaven</Link>
         <div className="relative">
           {stage === "building" && tick >= BUILD.length && <Confetti count={48} />}
           <motion.div animate={{ y: [0, -14, 0] }} transition={{ duration: 3.2, repeat: Infinity, ease: "easeInOut" }}>

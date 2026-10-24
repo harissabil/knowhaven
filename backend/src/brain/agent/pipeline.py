@@ -303,7 +303,7 @@ class _Run:
         st, ev = self._start(4, "LLM+CODE", "retrieve")
         yield ev
         async with tenant_session(ctx.tenant_id) as s:
-            r.policy = await pii_policy(s, ctx, und.needs_pii)
+            r.policy = await pii_policy(s, ctx, True)
         await self._baseline_retrieval()
         planner_model = None
         try:
@@ -315,7 +315,7 @@ class _Run:
         hits = self._evidence_hits()
         yield self._end(st, f"Ditemukan {len(hits)} sumber yang bisa Anda akses",
                         tool_calls=[c.__dict__ for c in r.calls], filtered_total=sum(c.filtered_count for c in r.calls),
-                        pii_released=r.policy.any)  # fmt: skip
+                        pii_released=any(h.revealed_pii for h in hits))  # fmt: skip
 
         # 5 [LLM+CODE] evidence -----------------------------------------------------------------------
         st, ev = self._start(5, "LLM+CODE", "evidence")
@@ -599,6 +599,7 @@ class _Run:
                     s, ctx, self.query_id, self.details["draft_candidates"]
                 )
                 self.details["action_draft_ids"] = [str(d) for d in draft_ids]
+            pii_released = any(h.revealed_pii for h in self.retriever.seen.values())
             await audit.append(
                 s, ctx.tenant_id, "query", query_id=self.query_id, actor_user_id=ctx.user_id, channel=self.channel,
                 query_text=pii.mask_text(self.q, pol.company_domains)[0],
@@ -608,7 +609,7 @@ class _Run:
                 decision_path=decision, response_text=pii.mask_text(text, pol.company_domains)[0],
                 citations=list(citations), model_ids=self.models, prompt_version=prompts.PROMPT_VERSION,
                 latency_ms=int((time.monotonic() - self.t0) * 1000),
-                details=audit.jsonable({**self.details, "pii_released": pol.any, "notes": self.notes,
+                details=audit.jsonable({**self.details, "pii_released": pii_released, "notes": self.notes,
                                         "conversation_id": self.conversation_id}),
             )  # fmt: skip
         by_id = {h.citation_id: h for h in cited_hits} | {h.item_id: h for h in cited_hits}

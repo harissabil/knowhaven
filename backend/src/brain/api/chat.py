@@ -13,9 +13,10 @@ from sqlalchemy import select
 from brain import storage
 from brain.agent.pipeline import Event, Pipeline
 from brain.api.deps import Member
-from brain.db.models import AuditLog, Container, Conversation, Message, PiiPermission, SourceItem
+from brain.db.models import AuditLog, Container, Conversation, Message, SourceItem
 from brain.db.session import tenant_session
 from brain.rbac.visibility import filter_visible_ids, visible_item_clause
+from brain.retrieval.search import pii_policy
 from brain.retrieval.tools import COMPANY_PROFILE_ID, Retriever
 
 router = APIRouter(tags=["chat"])
@@ -224,8 +225,10 @@ class SourceOut(BaseModel):
 @router.get("/sources/{citation_id:path}")
 async def source(citation_id: str, ctx: Member) -> SourceOut:
     """Open a cited source. Permission is checked again; forbidden and unknown IDs both 404
-    with the same body (T24). Text is masked (raw PII only through a question that needs it)."""
-    r = Retriever(ctx)
+    with the same body (T24). Only personal-data types the user's roles may see are unmasked."""
+    async with tenant_session(ctx.tenant_id) as s:
+        policy = await pii_policy(s, ctx, True)
+    r = Retriever(ctx, policy=policy)
     res = await r.get_item(citation_id)
     if not res.hits:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "source_not_found")
@@ -235,10 +238,13 @@ async def source(citation_id: str, ctx: Member) -> SourceOut:
         row = (await s.execute(
             select(SourceItem.storage_key, SourceItem.pii_spans).where(SourceItem.id == h.item_id, visible_item_clause(ctx))
         )).first()  # fmt: skip
-        allowed = set(await s.scalars(select(PiiPermission.pii_type).where(PiiPermission.role_id.in_(sorted(ctx.business_role_ids))))) if ctx.business_role_ids else set()  # fmt: skip
     # The original file is unmasked: offer it only if every kind of personal data in it is one the
-    # user's roles may see. Otherwise the masked text above is all they get.
-    if row and row.storage_key and {sp.get("type") for sp in (row.pii_spans or [])} <= allowed:
+    # user's roles may see. Otherwise the selectively masked text above is all they get.
+    if (
+        row
+        and row.storage_key
+        and {sp.get("type") for sp in (row.pii_spans or [])} <= policy.allowed
+    ):
         download = storage.presigned_get_url(row.storage_key, expires_in=300)
     return SourceOut(
         id=h.item_id, type=h.type, source=h.source, title=h.title, container=h.container, author=h.author,

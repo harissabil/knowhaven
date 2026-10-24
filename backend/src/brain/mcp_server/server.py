@@ -35,6 +35,7 @@ from brain.config import get_settings
 from brain.db.models import McpToken, Tenant, User
 from brain.db.session import global_session, tenant_session
 from brain.rbac.context import RequestContext, load_context
+from brain.retrieval.search import pii_policy
 from brain.retrieval.tools import NOT_FOUND, Retriever
 from brain.security import sha256
 
@@ -175,7 +176,9 @@ def build_server() -> MCPServer:
     )
     async def open_source(item_id: str, ctx: Context) -> str:
         rc = await _context(ctx)
-        res = await Retriever(rc).get_item(item_id)
+        async with tenant_session(rc.tenant_id) as s:
+            policy = await pii_policy(s, rc, True)
+        res = await Retriever(rc, policy=policy).get_item(item_id)
         found = bool(res.hits)
         async with tenant_session(rc.tenant_id) as s:
             await audit.append(

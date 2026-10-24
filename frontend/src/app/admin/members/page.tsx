@@ -5,9 +5,7 @@ import type { MemberOut, RoleOut } from "@/lib/contracts";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import {
-  Users,
   UserCheck,
-  Clock,
   UserX,
   Search,
   Check,
@@ -16,8 +14,10 @@ import {
   AlertTriangle,
   UserPlus,
   Shield,
-  Building2,
   Mail,
+  Plus,
+  Trash2,
+  Settings2,
 } from "lucide-react";
 import { Shell } from "@/components/Shell";
 import { RoleChip, StatusChip } from "@/components/Chip";
@@ -37,8 +37,22 @@ export interface MemberItem {
   slackUser?: string;
 }
 
+// Default seed names from backend/src/brain/tenancy/service.py ROLE_TEMPLATES
+const SEED_NAME: Record<string, string> = {
+  owner: "Owner",
+  admin: "Admin",
+  auditor: "Auditor",
+  new_hire: "Karyawan Baru",
+  staff: "Staf",
+  ops: "Operasional",
+  hr: "HR",
+  project_mgr: "Project Manager",
+  finance: "Keuangan",
+  direksi: "Direksi",
+};
+
 // Available roles categorized according to System Design Doc §4.1
-// Friendly labels for the default role keys; any other role shows its own name (doc §4.1).
+// Friendly labels for the default role keys; any other or renamed role shows its own name (doc §4.1).
 const ROLE_INFO: Record<string, { label: { id: string; en: string }; desc: { id: string; en: string } }> = Object.fromEntries([
   { key: "staff", label: { id: "Staf", en: "Staff" }, desc: { id: "Akses informasi umum perusahaan", en: "General company access" } },
   { key: "new_hire", label: { id: "Karyawan Baru", en: "New Hire" }, desc: { id: "Akses panduan onboarding & fasilitas", en: "Onboarding and benefits access" } },
@@ -46,15 +60,26 @@ const ROLE_INFO: Record<string, { label: { id: string; en: string }; desc: { id:
   { key: "hr", label: { id: "HR & Personalia", en: "HR" }, desc: { id: "Akses kebijakan internal & data pribadi (PII)", en: "Internal policies and PII access" } },
   { key: "project_mgr", label: { id: "Project Manager", en: "Project Manager" }, desc: { id: "Akses riwayat proyek & inisiatif khusus", en: "Project history and confidential initiatives" } },
   { key: "finance", label: { id: "Keuangan", en: "Finance" }, desc: { id: "Akses grade gaji & anggaran cabang", en: "Salary grades and branch budgets" } },
+  { key: "direksi", label: { id: "Direksi", en: "Director" }, desc: { id: "Akses strategis menyeluruh", en: "Broad executive access" } },
   { key: "director", label: { id: "Direksi", en: "Director" }, desc: { id: "Akses strategis menyeluruh", en: "Broad executive access" } },
   { key: "owner", label: { id: "Owner", en: "Owner" }, desc: { id: "Pemilik tenant (akses kontrol penuh)", en: "Tenant owner (full admin rights)" } },
   { key: "admin", label: { id: "Admin", en: "Admin" }, desc: { id: "Konfigurasi RBAC, container & integrasi; tidak memberi akses konten", en: "RBAC, containers & integrations config; grants no content" } },
   { key: "auditor", label: { id: "Auditor", en: "Auditor" }, desc: { id: "Hak melihat audit log & trace penuh", en: "View full audit log & execution traces" } },
 ].map(({ key, ...v }) => [key, v]));
 
-
 const hash = (s: string) => [...s].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7);
 const hueOf = (s: string) => [14, 28, 160, 200, 262, 330][hash(s) % 6];
+
+const toRoleKey = (s: string) =>
+  s
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^[^a-z]+/, "")
+    .replace(/_+/g, "_")
+    .replace(/^_|_$/g, "")
+    .slice(0, 31);
+
+const ROLE_KEY_RE = /^[a-z][a-z0-9_]{1,30}$/;
 
 export default function Members() {
   const t = useT();
@@ -88,11 +113,16 @@ export default function Members() {
   }
   useEffect(() => { loadMembers(); }, []);
 
-  const roleOpt = (r: RoleOut) => ({
-    key: r.key,
-    label: ROLE_INFO[r.key]?.label ?? { id: r.name, en: r.name },
-    desc: ROLE_INFO[r.key]?.desc ?? { id: r.name, en: r.name },
-  });
+  const roleOpt = (r: RoleOut) => {
+    const isDefaultName = SEED_NAME[r.key] === r.name;
+    return {
+      id: r.id,
+      key: r.key,
+      name: r.name,
+      label: isDefaultName && ROLE_INFO[r.key] ? ROLE_INFO[r.key].label : { id: r.name, en: r.name },
+      desc: ROLE_INFO[r.key]?.desc ?? { id: `Key: ${r.key}`, en: `Key: ${r.key}` },
+    };
+  };
   const BUSINESS_ROLES = roles.filter((r) => !r.is_system).map(roleOpt);
   const SYSTEM_ROLES = roles.filter((r) => r.is_system).map(roleOpt);
   const roleIds = (keys: string[]) => keys.map((k) => roles.find((r) => r.key === k)?.id).filter(Boolean) as string[];
@@ -100,8 +130,18 @@ export default function Members() {
 
   // Modals state
   const [selectedMember, setSelectedMember] = useState<MemberItem | null>(null);
-  const [modalMode, setModalMode] = useState<"approve" | "editRoles" | "remove" | null>(null);
+  const [modalMode, setModalMode] = useState<"approve" | "editRoles" | "remove" | "manageRoles" | null>(null);
   const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
+
+  // Role CRUD state inside Manage Roles modal
+  const [newRoleName, setNewRoleName] = useState("");
+  const [newRoleKey, setNewRoleKey] = useState("");
+  const [roleKeyTouched, setRoleKeyTouched] = useState(false);
+  const [creatingRole, setCreatingRole] = useState(false);
+  const [editingRoleId, setEditingRoleId] = useState<string | null>(null);
+  const [editingRoleName, setEditingRoleName] = useState("");
+  const [deletingRoleId, setDeletingRoleId] = useState<string | null>(null);
+  const [busyRoleId, setBusyRoleId] = useState<string | null>(null);
 
   // Filtered members list
   const filteredMembers = members.filter((m) => {
@@ -140,10 +180,86 @@ export default function Members() {
     setModalMode("remove");
   };
 
+  const handleOpenManageRoles = () => {
+    setEditingRoleId(null);
+    setDeletingRoleId(null);
+    setModalMode("manageRoles");
+  };
+
   const closeModal = () => {
     setSelectedMember(null);
     setModalMode(null);
     setSelectedRoles([]);
+    setEditingRoleId(null);
+    setDeletingRoleId(null);
+  };
+
+  // Role CRUD handlers
+  const effectiveNewKey = roleKeyTouched ? newRoleKey : toRoleKey(newRoleName);
+
+  const handleCreateBusinessRole = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const name = newRoleName.trim();
+    const key = effectiveNewKey.trim();
+    if (!name) return;
+    if (!ROLE_KEY_RE.test(key)) {
+      toast(
+        l(
+          "Key peran harus diawali huruf kecil, menggunakan a-z, 0-9, atau _, panjang 2–31 karakter.",
+          "Role key must start with a lowercase letter and use a-z, 0-9, or _ (2–31 chars).",
+        ),
+      );
+      return;
+    }
+    setCreatingRole(true);
+    try {
+      await apiFetch("/api/admin/roles", {
+        method: "POST",
+        body: JSON.stringify({ key, name }),
+      });
+      setNewRoleName("");
+      setNewRoleKey("");
+      setRoleKeyTouched(false);
+      toast(l(`Peran "${name}" berhasil dibuat.`, `Role "${name}" created.`));
+      await loadMembers();
+    } catch (e) {
+      fail(e);
+    } finally {
+      setCreatingRole(false);
+    }
+  };
+
+  const handleRenameBusinessRole = async (roleId: string) => {
+    const name = editingRoleName.trim();
+    if (!name) return;
+    setBusyRoleId(roleId);
+    try {
+      await apiFetch(`/api/admin/roles/${roleId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ name }),
+      });
+      setEditingRoleId(null);
+      toast(l("Nama peran diperbarui.", "Role renamed."));
+      await loadMembers();
+    } catch (e) {
+      fail(e);
+    } finally {
+      setBusyRoleId(null);
+    }
+  };
+
+  const handleDeleteBusinessRole = async (role: RoleOut) => {
+    setBusyRoleId(role.id);
+    try {
+      await apiFetch(`/api/admin/roles/${role.id}`, { method: "DELETE" });
+      setDeletingRoleId(null);
+      toast(l(`Peran "${role.name}" dihapus.`, `Role "${role.name}" deleted.`));
+      await loadMembers();
+    } catch (e) {
+      fail(e);
+    } finally {
+      setBusyRoleId(null);
+    }
   };
 
   // Action submit handlers
@@ -251,45 +367,6 @@ export default function Members() {
     <Shell title={t("members")}>
       <div className="flex flex-col gap-6 max-w-6xl">
         {loadErr && <p role="alert" className="text-bad">{loadErr}</p>}
-        {/* Top Summary Cards
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="card p-4 flex flex-col gap-1">
-            <div className="flex items-center justify-between text-muted">
-              <span className="text-xs uppercase font-medium">{l("Total Anggota", "Total Members")}</span>
-              <Users size={16} />
-            </div>
-            <p className="text-2xl font-bold">{members.length}</p>
-          </div>
-          <div className="card p-4 flex flex-col gap-1">
-            <div className="flex items-center justify-between text-muted">
-              <span className="text-xs uppercase font-medium">{l("Anggota Aktif", "Active Members")}</span>
-              <UserCheck size={16} className="text-ok" />
-            </div>
-            <p className="text-2xl font-bold text-ok">{countActive}</p>
-          </div>
-          <div
-            className={`card p-4 flex flex-col gap-1 transition-colors ${countPending > 0 ? "border-amber-500/50 bg-amber-500/5" : ""
-              }`}
-          >
-            <div className="flex items-center justify-between text-muted">
-              <span className="text-xs uppercase font-medium">{l("Menunggu Persetujuan", "Pending Approval")}</span>
-              <Clock size={16} className={countPending > 0 ? "text-warn animate-pulse" : ""} />
-            </div>
-            <div className="flex items-baseline gap-2">
-              <p className={`text-2xl font-bold ${countPending > 0 ? "text-warn" : ""}`}>{countPending}</p>
-              {countPending > 0 && (
-                <span className="text-xs text-warn font-medium">{l("Butuh tindakan", "Action needed")}</span>
-              )}
-            </div>
-          </div>
-          <div className="card p-4 flex flex-col gap-1">
-            <div className="flex items-center justify-between text-muted">
-              <span className="text-xs uppercase font-medium">{l("Dikeluarkan", "Removed")}</span>
-              <UserX size={16} />
-            </div>
-            <p className="text-2xl font-bold text-muted">{countRemoved}</p>
-          </div>
-        </div> */}
 
         {/* Action Header & Tabs */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -325,8 +402,8 @@ export default function Members() {
             </button>
           </div>
 
-          {/* Search & Invite Action */}
-          <div className="flex items-center gap-2.5">
+          {/* Search, Manage Roles & Invite Action */}
+          <div className="flex flex-wrap items-center gap-2.5">
             <div className="relative">
               <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
               <input
@@ -336,6 +413,14 @@ export default function Members() {
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
+            <button
+              type="button"
+              onClick={handleOpenManageRoles}
+              className="btn !py-1.5 text-sm inline-flex items-center gap-1.5"
+            >
+              <Settings2 size={15} />
+              <span>{l("Kelola Peran", "Manage Roles")}</span>
+            </button>
             <Link href="/admin/invites" className="btn btn-primary !py-1.5 text-sm inline-flex items-center gap-1.5">
               <UserPlus size={15} />
               <span>{l("Undang Anggota", "Invite Members")}</span>
@@ -486,25 +571,6 @@ export default function Members() {
             </tbody>
           </table>
         </div>
-
-        {/* Explanatory notes from doc §4.1
-        <div className="card p-4 bg-surface2/60 border-line text-xs text-muted flex flex-col gap-1.5">
-          <p className="font-semibold text-fg flex items-center gap-1.5">
-            <Shield size={14} className="text-brand" />
-            {l("Prinsip Pemisahan Peran (Doc §4.1)", "Role Separation Principles (Doc §4.1)")}
-          </p>
-          <ul className="list-disc pl-4 space-y-1">
-            <li>
-              <b>{l("Peran Bisnis", "Business Roles")}</b> (Karyawan Baru, Staf, Ops, HR, Project Manager, Keuangan, Direksi) menentukan container, dokumen, dan pesan yang boleh dilihat di web dan WorkBuddy.
-            </li>
-            <li>
-              <b>{l("Peran Sistem", "System Roles")}</b> (Owner, Admin, Auditor) memberi hak konfigurasi, bukan hak membaca konten bisnis. Admin tidak otomatis membaca seluruh dokumen tersembunyi.
-            </li>
-            <li>
-              <b>{l("Anggota Pending", "Pending Members")}</b> yang bergabung via kode perusahaan memiliki akses data nol sampai disetujui oleh Owner/Admin.
-            </li>
-          </ul>
-        </div> */}
       </div>
 
       {/* MODAL 1: APPROVE PENDING MEMBER */}
@@ -639,14 +705,23 @@ export default function Members() {
               <div className="overflow-y-auto flex-1 pr-1 flex flex-col gap-5 py-2">
                 {/* Business Roles Group */}
                 <div>
-                  <div className="mb-2">
-                    <p className="font-semibold text-sm">{l("Peran Bisnis (Akses Data)", "Business Roles (Data Access)")}</p>
-                    <p className="text-xs text-muted">
-                      {l(
-                        "Menentukan akses ke channel Slack, dokumen Confluence, dan task Jira.",
-                        "Governs access to Slack channels, Confluence spaces, and Jira projects."
-                      )}
-                    </p>
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <div>
+                      <p className="font-semibold text-sm">{l("Peran Bisnis (Akses Data)", "Business Roles (Data Access)")}</p>
+                      <p className="text-xs text-muted">
+                        {l(
+                          "Menentukan akses ke channel Slack, dokumen Confluence, dan task Jira.",
+                          "Governs access to Slack channels, Confluence spaces, and Jira projects."
+                        )}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn !py-1 !px-2.5 text-xs shrink-0"
+                      onClick={handleOpenManageRoles}
+                    >
+                      <Settings2 size={13} /> {l("Tambah / Edit Peran", "Add / Edit Roles")}
+                    </button>
                   </div>
                   <div className="grid sm:grid-cols-2 gap-2">
                     {BUSINESS_ROLES.map((r) => {
@@ -777,6 +852,207 @@ export default function Members() {
                 </button>
                 <button className="btn bg-red-600 hover:bg-red-700 text-white border-red-600" onClick={handleRemoveConfirm}>
                   <UserX size={15} /> {l("Ya, Keluarkan", "Yes, Remove")}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* MODAL 4: MANAGE BUSINESS ROLES (CREATE / RENAME / DELETE) */}
+      <AnimatePresence>
+        {modalMode === "manageRoles" && (
+          <div
+            className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs grid place-items-center p-4 overflow-y-auto"
+            onClick={closeModal}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="card p-6 w-full max-w-xl shadow-xl max-h-[90vh] flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-start justify-between mb-3 shrink-0">
+                <div>
+                  <h3 className="text-xl font-bold flex items-center gap-2">
+                    <Settings2 size={19} className="text-brand" />
+                    {l("Kelola Peran Perusahaan", "Manage Company Roles")}
+                  </h3>
+                  <p className="text-xs text-muted mt-0.5">
+                    {l(
+                      "Tambah, ubah nama, atau hapus peran bisnis. Setiap perubahan dicatat di audit log.",
+                      "Add, rename, or delete business roles. Every change is recorded in the audit log.",
+                    )}
+                  </p>
+                </div>
+                <button className="btn !p-1.5 rounded-full" onClick={closeModal}>
+                  <X size={16} />
+                </button>
+              </div>
+
+              {/* Create Role Form */}
+              <form
+                onSubmit={handleCreateBusinessRole}
+                className="p-3 rounded-erp bg-surface2 border border-line mb-4 flex flex-wrap items-end gap-2 shrink-0"
+              >
+                <label className="flex flex-col gap-1 text-xs flex-1 min-w-[160px]">
+                  <span className="font-medium">{l("Nama Peran Baru", "New Role Name")}</span>
+                  <input
+                    className="input !py-1.5 text-sm"
+                    value={newRoleName}
+                    onChange={(e) => {
+                      setNewRoleName(e.target.value);
+                      if (!roleKeyTouched) setNewRoleKey(toRoleKey(e.target.value));
+                    }}
+                    placeholder={l("mis. Legal & Kepatuhan", "e.g. Legal & Compliance")}
+                    disabled={creatingRole}
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-xs w-40">
+                  <span className="text-muted font-mono">Key (a-z, 0-9, _)</span>
+                  <input
+                    className="input !py-1.5 font-mono text-xs"
+                    value={effectiveNewKey}
+                    onChange={(e) => {
+                      setRoleKeyTouched(true);
+                      setNewRoleKey(e.target.value.toLowerCase());
+                    }}
+                    placeholder="legal_compliance"
+                    disabled={creatingRole}
+                  />
+                </label>
+                <button
+                  type="submit"
+                  className="btn btn-primary !py-1.5 text-xs"
+                  disabled={creatingRole || !newRoleName.trim() || !ROLE_KEY_RE.test(effectiveNewKey)}
+                >
+                  <Plus size={14} /> {creatingRole ? l("Menambah…", "Adding…") : l("Tambah", "Add")}
+                </button>
+              </form>
+
+              {/* Roles List */}
+              <div className="overflow-y-auto flex-1 pr-1 flex flex-col gap-4">
+                <div>
+                  <div className="eyebrow mb-2">
+                    {l("Peran Bisnis", "Business Roles")} ({BUSINESS_ROLES.length})
+                  </div>
+                  <div className="divide-y divide-line border border-line rounded-erp overflow-hidden">
+                    {roles.filter((r) => !r.is_system).map((r) => {
+                      const isEditing = editingRoleId === r.id;
+                      const isDeleting = deletingRoleId === r.id;
+                      return (
+                        <div key={r.id} className="p-2.5 bg-surface flex items-center justify-between gap-2 text-sm">
+                          {isEditing ? (
+                            <div className="flex items-center gap-1.5 flex-1">
+                              <input
+                                className="input !py-1 text-sm"
+                                value={editingRoleName}
+                                onChange={(e) => setEditingRoleName(e.target.value)}
+                                autoFocus
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") handleRenameBusinessRole(r.id);
+                                  if (e.key === "Escape") setEditingRoleId(null);
+                                }}
+                              />
+                              <button
+                                type="button"
+                                className="btn btn-primary !p-1.5"
+                                onClick={() => handleRenameBusinessRole(r.id)}
+                                disabled={busyRoleId === r.id || !editingRoleName.trim()}
+                              >
+                                <Check size={14} />
+                              </button>
+                              <button
+                                type="button"
+                                className="btn !p-1.5"
+                                onClick={() => setEditingRoleId(null)}
+                              >
+                                <X size={14} />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="font-semibold truncate">{r.name}</span>
+                              <code className="text-xs px-1.5 py-0.5 rounded bg-surface2 text-muted font-mono">
+                                {r.key}
+                              </code>
+                            </div>
+                          )}
+
+                          {!isEditing && (
+                            isDeleting ? (
+                              <div className="flex items-center gap-1.5 text-xs shrink-0">
+                                <span className="text-bad font-medium">{l("Hapus?", "Delete?")}</span>
+                                <button
+                                  type="button"
+                                  className="btn !py-1 !px-2 text-xs !border-bad !text-bad hover:!bg-bad/10"
+                                  onClick={() => handleDeleteBusinessRole(r)}
+                                  disabled={busyRoleId === r.id}
+                                >
+                                  {l("Ya", "Yes")}
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn !py-1 !px-2 text-xs"
+                                  onClick={() => setDeletingRoleId(null)}
+                                >
+                                  {l("Batal", "No")}
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-1 shrink-0">
+                                <button
+                                  type="button"
+                                  className="btn !py-1 !px-2 text-xs"
+                                  onClick={() => {
+                                    setEditingRoleId(r.id);
+                                    setEditingRoleName(r.name);
+                                    setDeletingRoleId(null);
+                                  }}
+                                >
+                                  <Edit2 size={12} /> {l("Ubah nama", "Rename")}
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn !py-1 !px-2 text-xs text-muted hover:text-bad"
+                                  onClick={() => {
+                                    setDeletingRoleId(r.id);
+                                    setEditingRoleId(null);
+                                  }}
+                                  title={l("Hapus peran", "Delete role")}
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              </div>
+                            )
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="eyebrow mb-2">
+                    {l("Peran Sistem (Tetap / Tidak Bisa Dihapus)", "System Roles (Immutable)")}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {SYSTEM_ROLES.map((r) => (
+                      <span
+                        key={r.key}
+                        className="inline-flex items-center gap-1.5 text-xs px-3 py-1 rounded-full bg-purple-500/10 text-purple-700 dark:text-purple-300 border border-purple-500/30 font-medium"
+                      >
+                        <Shield size={12} /> {r.name} <code className="opacity-75 font-mono">({r.key})</code>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end pt-3 border-t border-line mt-4 shrink-0">
+                <button className="btn" onClick={closeModal}>
+                  {l("Tutup", "Close")}
                 </button>
               </div>
             </motion.div>

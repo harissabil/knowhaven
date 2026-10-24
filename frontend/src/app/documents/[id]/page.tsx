@@ -154,8 +154,8 @@ export default function DocumentPage() {
                 <div className="flex items-center gap-2">
                   <h3 className="font-semibold flex-1">{l("Teks yang diindeks", "Indexed text")}</h3>
                   {doc.has_pii && !doc.can_download && (
-                    <span className="text-xs text-warn inline-flex items-center gap-1" title={l("File asli memuat data pribadi yang tidak boleh dilihat peran Anda.", "The original contains personal data your roles may not see.")}>
-                      <ShieldAlert size={13} /> {l("Data pribadi disamarkan; file asli tidak tersedia", "Personal data masked; original not available")}
+                    <span className="text-xs text-warn inline-flex items-center gap-1" title={l("File asli memuat jenis data pribadi yang dibatasi untuk peran Anda. Jenis data pribadi yang diizinkan tetap ditampilkan pada teks di bawah.", "The original file contains personal data types restricted for your roles. Permitted personal data types remain visible in the text below.")}>
+                      <ShieldAlert size={13} /> {l("Sebagian data pribadi disamarkan sesuai izin; file asli tidak tersedia", "Restricted personal data masked per role permissions; original not available")}
                     </span>
                   )}
                 </div>

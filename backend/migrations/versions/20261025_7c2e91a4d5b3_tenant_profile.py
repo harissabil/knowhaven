@@ -8,7 +8,6 @@ Create Date: 2026-10-25 00:10:00.000000
 
 from collections.abc import Sequence
 
-import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
@@ -19,7 +18,7 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    op.add_column("tenants", sa.Column("profile", sa.Text(), nullable=True))
+    op.execute("ALTER TABLE tenants ADD COLUMN IF NOT EXISTS profile TEXT")
 
 
 def downgrade() -> None:

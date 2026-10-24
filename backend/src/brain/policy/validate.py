@@ -17,6 +17,7 @@ _ID = re.compile(r"^(?:CHAT|DOC|TASK)-[A-Za-z0-9][\w.#-]*$")
 # A citation right after the sentence end belongs to that sentence: "… per bulan. [X]" → "… per bulan [X]."
 _TRAILING_CITE = re.compile(r"([.!?])(\s*)((?:\[[^\[\]]+\]\s*)+)")
 _SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+|\n+")
+_DIGIT_RUN = re.compile(r"\d+")
 
 
 @dataclass
@@ -56,6 +57,20 @@ def _base(citation: str) -> str:
     return citation.split("#", 1)[0]
 
 
+def _pii_numbers(text: str, company_domains: frozenset[str]) -> set[int]:
+    """Extract numeric tokens and full digit sequences from PII spans so formatted NPWPs,
+    phones, and bank accounts in cited sources never trigger false unsupported_number errors."""
+    nums: set[int] = set()
+    for s in pii.detect(text, company_domains):
+        raw = text[s.start : s.end]
+        digits = "".join(c for c in raw if c.isdigit())
+        if digits:
+            nums.add(int(digits))
+        for m in _DIGIT_RUN.finditer(raw):
+            nums.add(int(m.group(0)))
+    return nums
+
+
 def validate(
     answer: str,
     allowed: dict[str, str],
@@ -73,21 +88,28 @@ def validate(
     if not cites:
         problems.append("no_citations")
 
-    for s in _sentences(answer):
+    # PII guard: mask any PII-shaped span of a type this user may not see (deterministic).
+    spans = [s for s in pii.detect(answer, company_domains) if s.type not in pii_allowed]
+    text = pii.mask(answer, spans)
+
+    for s in _sentences(text):
         if _needs_citation(s) and not citations_in(s):
             problems.append(f"uncited_sentence:{s[:60]}")
 
     cited_text = " ".join(
-        text
-        for key, text in allowed.items()
+        src_text
+        for key, src_text in allowed.items()
         if key in cites or _base(key) in {_base(c) for c in cites}
     )
-    known = set(amounts(cited_text)) | set(amounts(question))
-    for n in amounts(_BRACKET.sub(" ", answer)):
-        if n >= 10 and n not in known:
+    known = (
+        set(amounts(cited_text))
+        | set(amounts(question))
+        | _pii_numbers(cited_text, company_domains)
+        | {int(m.group(0)) for m in _DIGIT_RUN.finditer(cited_text)}
+    )
+    answer_pii_nums = _pii_numbers(text, company_domains)
+    for n in amounts(_BRACKET.sub(" ", text)):
+        if n >= 10 and n not in known and n not in answer_pii_nums:
             problems.append(f"unsupported_number:{n}")
 
-    # PII guard: mask any PII-shaped span of a type this user may not see (deterministic).
-    spans = [s for s in pii.detect(answer, company_domains) if s.type not in pii_allowed]
-    text = pii.mask(answer, spans)
     return Validation(not problems, text, cites, problems, len(spans))
