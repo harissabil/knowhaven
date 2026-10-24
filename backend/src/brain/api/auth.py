@@ -122,7 +122,10 @@ async def login(body: LoginIn, response: Response) -> MeOut:
         if user is None and "@" not in ident:
             user = await s.scalar(
                 select(User)
-                .where(func.lower(User.email).like(f"{ident}@%"))
+                .where(
+                    (func.lower(User.email).like(f"{ident}@%"))
+                    | (func.lower(User.email).like(f"{ident}.%@%"))
+                )
                 .order_by(User.created_at)
             )
     is_valid = verify_password(user.password_hash if user else None, body.password)
