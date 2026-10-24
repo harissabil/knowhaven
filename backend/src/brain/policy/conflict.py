@@ -111,10 +111,18 @@ class Resolution:
         }
 
 
-def _pick(claims: list[Claim]) -> Claim:
-    """Representative claim for one value: most authoritative, then newest."""
+def _pick(claims: list[Claim], multi: frozenset[str] = frozenset()) -> Claim:
+    """Representative claim for one value: most authoritative, then a source that states only this
+    value (an item listing several values for the topic, e.g. "naik dari 500rb menjadi 750rb", is weak
+    evidence for any single one of them), then announcements, then newest."""
     return max(
-        claims, key=lambda c: (c.authoritative, c.authority == "official_announcement", c.date)
+        claims,
+        key=lambda c: (
+            c.authoritative,
+            c.item_id not in multi,
+            c.authority == "official_announcement",
+            c.date,
+        ),
     )
 
 
@@ -122,10 +130,14 @@ def resolve_topic(topic: str, claims: list[Claim]) -> Resolution:
     numeric = all(c.norm.startswith("#") for c in claims)
     if not numeric or len({c.item_id for c in claims}) == 1:
         return Resolution(topic, _pick(claims), "single")
+    values_per_item: dict[str, set[str]] = {}
+    for c in claims:
+        values_per_item.setdefault(c.item_id, set()).add(c.norm)
+    multi = frozenset(i for i, v in values_per_item.items() if len(v) > 1)
     by_value: dict[str, list[Claim]] = {}
     for c in claims:
         by_value.setdefault(c.norm, []).append(c)
-    reps = [_pick(v) for v in by_value.values()]
+    reps = [_pick(v, multi) for v in by_value.values()]
     if len(reps) == 1:
         return Resolution(topic, reps[0], "single")
 

@@ -51,16 +51,25 @@ def topic_phrase(question: str, llm_topic: str | None) -> str:
     return q if len(q) <= 80 else q[:77].rstrip() + "..."
 
 
+def term_in(term: str, question: str) -> bool:
+    """An alias matches verbatim, or, for multi-word aliases, when all its words appear in any order
+    ("gaji level" matches "rentang gaji pokok level 3"): people rarely use the exact phrase."""
+    term, low = term.lower().strip(), question.lower()
+    if not term:
+        return False
+    if re.search(rf"\b{re.escape(term)}\b", low):
+        return True
+    words = term.split()
+    return len(words) > 1 and all(re.search(rf"\b{re.escape(w)}\b", low) for w in words)
+
+
 async def match_topic(s: AsyncSession, question: str) -> TopicMatch | None:
     """A public topic (open/gated) whose name or alias appears in the question."""
-    low = question.lower()
     best: tuple[int, TopicOwner] | None = None
     for t in await s.scalars(select(TopicOwner).where(TopicOwner.tier.in_(("open", "gated")))):
         for term in (t.display_name, *t.aliases):
-            term_low = term.lower().strip()
-            if term_low and re.search(rf"\b{re.escape(term_low)}\b", low):
-                if best is None or len(term_low) > best[0]:
-                    best = (len(term_low), t)
+            if term_in(term, question) and (best is None or len(term) > best[0]):
+                best = (len(term), t)
     if best is None:
         return None
     t = best[1]
