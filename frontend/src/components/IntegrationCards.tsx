@@ -149,8 +149,12 @@ export function IntegrationCards({ tid }: { tid: string }) {
               </div>
               <p className="text-sm text-muted">
                 {l("Pesan masuk real-time. Event terakhir", "Messages arrive in real time. Last event")}: {slack.meta.last_event_at ? relTime(String(slack.meta.last_event_at), lang) : l("belum ada", "none yet")}.{" "}
-                {l("Havi hanya menerima pesan dari channel tempat ia diundang (", "Havi only receives messages from channels it was invited to (")}<code>/invite @havi</code>).
+                {l("Havi otomatis bergabung ke channel publik. Untuk channel private, ketik ", "Havi joins public channels by itself. For private channels, type ")}<code>/invite @havi</code>{l(" di channel itu.", " in that channel.")}
               </p>
+              {slack.meta.join_error === "missing_scope" && (
+                <p className="text-sm text-warn">{l("Izin bergabung ke channel belum diberikan. Klik \"Hubungkan Slack\" sekali lagi untuk memperbarui izin.", "Permission to join channels is missing. Click \"Add to Slack\" once more to update the permissions.")}
+                  {" "}<a className="underline" href="/api/integrations/slack/install">{l("Perbarui izin", "Update permissions")}</a></p>
+              )}
               {slack.last_error && <p className="text-sm text-bad">{slack.last_error}</p>}
               <div className="flex gap-2 flex-wrap">
                 <button className="btn" disabled={busy === "refresh"} onClick={refreshSlack}><RefreshCw size={16} className={busy === "refresh" ? "animate-spin" : ""} /> {l("Segarkan channel & anggota", "Refresh channels & members")}</button>

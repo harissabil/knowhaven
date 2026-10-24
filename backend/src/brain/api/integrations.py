@@ -116,11 +116,14 @@ async def refresh_slack(tenant_id: uuid.UUID, token: str) -> dict:
     counts = await sync.ensure_containers(
         tenant_id, "slack_channel", [(c["id"], c["name"]) for c in chans], adopt_by_name=True
     )
+    joined, join_error = await slack.join_public(token, chans)
     mapped = await map_slack_members(tenant_id, await slack.users(token))
     member_of = sum(1 for c in chans if c.get("is_member"))
     return {
         "channels": len(chans),
         "bot_in_channels": member_of,
+        "joined_now": joined,
+        "join_error": join_error,  # missing_scope: reinstall with "Add to Slack"
         "members_mapped": mapped,
         **{f"channels_{k}": v for k, v in counts.items()},
     }
