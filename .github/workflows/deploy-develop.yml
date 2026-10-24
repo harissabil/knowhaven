@@ -1,0 +1,132 @@
+# Every push to develop: check backend + frontend, then deploy the whole stack to the
+# server named in the DEPLOY_HOST secret (docker compose: caddy, api, mcp, web).
+#
+# Required repository secrets:
+#   DEPLOY_HOST         server address (IP or hostname)
+#   DEPLOY_USER         SSH user with passwordless sudo (ubuntu)
+#   DEPLOY_SSH_KEY      private key of a deploy-only key pair (public half in ~/.ssh/authorized_keys)
+#   DEPLOY_KNOWN_HOSTS  pinned host key line, e.g. output of `ssh-keyscan -t ed25519 <host>`
+#
+# Secrets on the server are never touched: backend/.env, backend/gcp-sa.json and the root .env
+# stay where they are; only tracked repository files are synced.
+name: Deploy develop
+
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-develop
+  cancel-in-progress: false # never interrupt a deploy halfway
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend checks
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv sync --frozen
+      - run: uv run ruff check src tests
+      - run: uv run ruff format --check src tests
+      # Import the app so a broken module fails here and not on the server.
+      - run: uv run python -c "import brain.main"
+        env:
+          APP_ENV: ci
+
+  frontend:
+    name: Frontend checks
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      # next build type-checks too, after generating its route types (LayoutProps etc.).
+      - run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
+
+  deploy:
+    name: Deploy to server
+    needs: [backend, frontend]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Package tracked files
+        run: git archive --format=tar.gz -o release.tar.gz HEAD
+
+      - name: Configure SSH
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key && chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts && chmod 644 ~/.ssh/known_hosts
+
+      - name: Upload release
+        env:
+          TARGET: ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}
+        run: |
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes release.tar.gz "$TARGET:/tmp/wb-release-${GITHUB_SHA}.tar.gz"
+
+      - name: Install and restart
+        env:
+          TARGET: ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes "$TARGET" "SHA=${GITHUB_SHA} bash -s" <<'REMOTE'
+          set -euo pipefail
+          APP=/opt/the-workplace-brain
+          STAGE=/tmp/wb-release-$SHA
+          rm -rf "$STAGE" && mkdir -p "$STAGE"
+          tar -xzf "$STAGE.tar.gz" -C "$STAGE"
+
+          # Keep a copy of what is running now, then sync tracked files only.
+          sudo rm -rf /opt/the-workplace-brain.prev
+          sudo cp -a "$APP" /opt/the-workplace-brain.prev
+          sudo rsync -a --delete \
+            --exclude '/.env' \
+            --exclude '/backend/.env' \
+            --exclude '/backend/gcp-sa.json' \
+            "$STAGE/" "$APP/"
+          echo "$SHA" | sudo tee "$APP/REVISION" >/dev/null
+
+          cd "$APP"
+          sudo docker compose up -d --build --remove-orphans
+          # rsync swaps files by rename and Caddy's single-file bind mount keeps the old inode,
+          # so restart it to pick up a changed Caddyfile.
+          sudo docker compose restart caddy
+
+          # Wait for the API through Caddy, the same path users take.
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1/healthz >/dev/null; then ok=1; break; fi
+            sleep 3
+          done
+          if [ -z "${ok:-}" ]; then
+            echo "health check failed; recent logs:"
+            sudo docker compose logs --tail 80 api web caddy
+            exit 1
+          fi
+          curl -fsS -o /dev/null http://127.0.0.1/ && echo "web ok"
+
+          sudo docker image prune -f >/dev/null
+          rm -rf "$STAGE" "$STAGE.tar.gz"
+          echo "deployed $SHA (previous release kept in /opt/the-workplace-brain.prev)"
+          REMOTE
