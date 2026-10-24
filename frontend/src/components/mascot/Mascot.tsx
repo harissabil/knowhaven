@@ -1,90 +1,200 @@
 "use client";
 import { motion, useMotionValue, useSpring } from "framer-motion";
-import { useEffect, useRef } from "react";
+import { useEffect, useId, useRef } from "react";
 
 export type MascotState =
-  | "idle" | "listening" | "thinking" | "answering" | "idk"
-  | "refusing" | "conflict" | "waiting" | "celebrate";
+  | "idle"
+  | "listening"
+  | "thinking"
+  | "answering"
+  | "idk"
+  | "refusing"
+  | "conflict"
+  | "waiting"
+  | "celebrate";
 
-const MOUTH: Record<MascotState, string> = {
-  idle: "M44 66 Q60 76 76 66",
-  listening: "M52 68 Q60 72 68 68",
-  thinking: "M52 70 L68 70",
-  answering: "M42 64 Q60 84 78 64",
-  idk: "M48 72 Q60 66 72 72",
-  refusing: "M50 70 L70 70",
-  conflict: "M48 72 Q60 66 72 72",
-  waiting: "M52 70 Q60 74 68 70",
-  celebrate: "M40 62 Q60 90 80 62 Z",
+const STATE_COLOR: Record<MascotState, string> = {
+  idle: "#38bdf8",
+  listening: "#38bdf8",
+  thinking: "#60a5fa",
+  answering: "#34d399",
+  idk: "#94a3b8",
+  refusing: "#f87171",
+  conflict: "#fbbf24",
+  waiting: "#38bdf8",
+  celebrate: "#38bdf8",
 };
 
-/** Original SVG mascot "Havi": a friendly brain wearing a little house-roof cap (know + haven). */
+/**
+ * Havi — Minimalist geometric visor companion.
+ * Clean squircle silhouette, obsidian visor, and expressive LED eyes (no antennas, ear pods, mouths, or corner badges).
+ */
 export function Mascot({ state = "idle", size = 96 }: { state?: MascotState; size?: number }) {
+  const uid = useId().replace(/:/g, "");
   const ref = useRef<SVGSVGElement>(null);
-  const mx = useMotionValue(0), my = useMotionValue(0);
-  const ex = useSpring(mx, { stiffness: 180, damping: 18 }), ey = useSpring(my, { stiffness: 180, damping: 18 });
-  // eyes follow the cursor (clamped), skipped for tiny avatars
+  const mx = useMotionValue(0);
+  const my = useMotionValue(0);
+  const ex = useSpring(mx, { stiffness: 180, damping: 22 });
+  const ey = useSpring(my, { stiffness: 180, damping: 22 });
+
+  const interactive = size > 44;
+
   useEffect(() => {
-    if (size < 40) return;
+    if (!interactive) {
+      mx.set(0);
+      my.set(0);
+      return;
+    }
     const h = (e: MouseEvent) => {
       const r = ref.current?.getBoundingClientRect();
       if (!r) return;
-      const dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2);
-      const d = Math.hypot(dx, dy) || 1, k = Math.min(1, d / 220) * 3.2;
-      mx.set((dx / d) * k); my.set((dy / d) * k);
+      const dx = e.clientX - (r.left + r.width / 2);
+      const dy = e.clientY - (r.top + r.height / 2);
+      const d = Math.hypot(dx, dy) || 1;
+      const k = Math.min(1, d / 240) * 3.8;
+      mx.set((dx / d) * k);
+      my.set((dy / d) * k);
     };
     window.addEventListener("mousemove", h);
     return () => window.removeEventListener("mousemove", h);
-  }, [size, mx, my]);
-  const bob = state === "thinking" ? { y: [0, -3, 0], rotate: [-3, 3, -3] }
-    : state === "celebrate" ? { y: [0, -14, 0] }
-    : { y: [0, -4, 0] };
+  }, [interactive, mx, my]);
+
+  const led = STATE_COLOR[state];
+
+  const bob =
+    !interactive && state === "idle"
+      ? undefined
+      : state === "celebrate"
+        ? { y: [0, -6, 0] }
+        : { y: [0, -2.5, 0] };
+
   return (
     <motion.svg
-      ref={ref} viewBox="0 0 120 120" width={size} height={size} role="img"
+      ref={ref}
+      viewBox="0 0 120 120"
+      width={size}
+      height={size}
+      role="img"
       aria-label={`Havi, Knowhaven mascot (${state})`}
       animate={bob}
-      transition={{ duration: state === "celebrate" ? 0.6 : 2.4, repeat: Infinity, ease: "easeInOut" }}
+      transition={
+        bob
+          ? { duration: state === "celebrate" ? 0.7 : 3.2, repeat: Infinity, ease: "easeInOut" }
+          : undefined
+      }
+      className="shrink-0 select-none"
     >
-      {/* brain body */}
-      <path d="M22 62 C14 40 34 24 50 30 C58 20 78 22 84 34 C104 34 110 58 98 70 C102 90 80 100 66 94 C54 102 30 98 28 82 C20 80 18 70 22 62Z"
-        fill="#ff9fc4" stroke="#c2417a" strokeWidth="3" />
-      <path d="M60 34 C56 48 64 56 58 70 M40 50 C46 52 48 58 44 62 M82 50 C76 52 74 58 78 62"
-        fill="none" stroke="#c2417a" strokeWidth="2.5" strokeLinecap="round" />
-      {/* house-roof cap: the "haven" */}
-      <rect x="78" y="8" width="8" height="14" rx="1.5" fill="#92400e" stroke="#78350f" strokeWidth="2" />
-      <path d="M26 38 L60 8 L94 38 Z" fill="#f59e0b" stroke="#b45309" strokeWidth="3" strokeLinejoin="round" />
-      <rect x="22" y="36" width="76" height="6" rx="3" fill="#fbbf24" stroke="#b45309" strokeWidth="2.5" />
-      <motion.rect x="55" y="22" width="10" height="9" rx="1.5" stroke="#b45309" strokeWidth="1.5"
-        fill={state === "thinking" ? "#fef08a" : "#fff7d6"}
-        animate={state === "thinking" ? { opacity: [0.5, 1, 0.5] } : { opacity: 1 }}
-        transition={{ duration: 1.2, repeat: Infinity }} />
-      {/* eyes */}
+      <defs>
+        <linearGradient id={`body-${uid}`} x1="20" y1="18" x2="100" y2="102" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#ffffff" />
+          <stop offset="100%" stopColor="#e8f1fa" />
+        </linearGradient>
+        <linearGradient id={`visor-${uid}`} x1="28" y1="36" x2="92" y2="86" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#0f172a" />
+          <stop offset="100%" stopColor="#090d16" />
+        </linearGradient>
+      </defs>
+
+      {/* Clean outer squircle shell */}
+      <rect
+        x="18"
+        y="18"
+        width="84"
+        height="84"
+        rx="28"
+        fill={`url(#body-${uid})`}
+        stroke="#cbd5e1"
+        strokeWidth="1.75"
+      />
+
+      {/* Minimal top status pill (Knowhaven accent) */}
+      <rect x="51" y="26" width="18" height="3.5" rx="1.75" fill={led} opacity="0.9" />
+
+      {/* Obsidian glass visor */}
+      <rect
+        x="28"
+        y="36"
+        width="64"
+        height="48"
+        rx="18"
+        fill={`url(#visor-${uid})`}
+      />
+
+      {/* Subtle glass reflection */}
+      <path
+        d="M38 42 H62"
+        stroke="#ffffff"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+        opacity="0.14"
+      />
+
+      {/* Minimalist LED eyes inside the visor */}
       <motion.g style={{ x: ex, y: ey }}>
-      <g fill="#172033">
-        <motion.ellipse cx="46" cy="56" rx="6" ry="7.5"
-          animate={{ scaleY: state === "idk" ? 1 : [1, 1, 0.1, 1] }}
-          transition={{ duration: 4, repeat: Infinity, times: [0, 0.9, 0.95, 1] }} style={{ originY: "56px" }} />
-        <motion.ellipse cx="74" cy="56" rx="6" ry="7.5"
-          animate={{ scaleY: [1, 1, 0.1, 1] }}
-          transition={{ duration: 4, repeat: Infinity, times: [0, 0.9, 0.95, 1] }} style={{ originY: "56px" }} />
-      </g>
-      <circle cx="48" cy="53" r="2" fill="#fff" /><circle cx="76" cy="53" r="2" fill="#fff" />
+        {state === "thinking" ? (
+          /* Three clean pulsing nodes */
+          <g fill={led}>
+            {[46, 60, 74].map((cx, i) => (
+              <motion.circle
+                key={cx}
+                cx={cx}
+                cy="60"
+                r="4"
+                animate={{ opacity: [0.25, 1, 0.25], scale: [0.85, 1.1, 0.85] }}
+                transition={{ duration: 1, repeat: Infinity, delay: i * 0.18 }}
+              />
+            ))}
+          </g>
+        ) : state === "answering" || state === "celebrate" ? (
+          /* Clean upward chevron/arc eyes */
+          <g fill="none" stroke={led} strokeWidth="3.75" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M40 62 Q46 53 52 62" />
+            <path d="M68 62 Q74 53 80 62" />
+          </g>
+        ) : state === "refusing" ? (
+          /* Guarded horizontal bar eyes */
+          <g fill={led}>
+            <rect x="39" y="57.5" width="14" height="5" rx="2.5" />
+            <rect x="67" y="57.5" width="14" height="5" rx="2.5" />
+          </g>
+        ) : state === "conflict" ? (
+          /* Weighing two sides: slightly offset heights */
+          <g fill={led}>
+            <rect x="41" y="55" width="10" height="12" rx="5" />
+            <rect x="69" y="51" width="10" height="12" rx="5" />
+          </g>
+        ) : state === "idk" ? (
+          /* Curious asymmetric eyes */
+          <g fill={led}>
+            <rect x="41" y="56" width="10" height="9" rx="4.5" />
+            <rect x="69" y="51" width="10" height="15" rx="5" />
+          </g>
+        ) : (
+          /* Default / listening / waiting: two clean vertical pill LEDs */
+          <g fill={led}>
+            <motion.rect
+              x="41"
+              y="52"
+              width="10"
+              height="16"
+              rx="5"
+              animate={interactive ? { scaleY: [1, 1, 0.1, 1] } : undefined}
+              transition={{ duration: 4.2, repeat: Infinity, times: [0, 0.93, 0.96, 1] }}
+              style={{ originY: "60px" }}
+            />
+            <motion.rect
+              x="69"
+              y="52"
+              width="10"
+              height="16"
+              rx="5"
+              animate={interactive ? { scaleY: [1, 1, 0.1, 1] } : undefined}
+              transition={{ duration: 4.2, repeat: Infinity, times: [0, 0.93, 0.96, 1] }}
+              style={{ originY: "60px" }}
+            />
+          </g>
+        )}
       </motion.g>
-      {/* cheeks + mouth */}
-      <circle cx="36" cy="66" r="4" fill="#ff6b9a" opacity=".5" /><circle cx="84" cy="66" r="4" fill="#ff6b9a" opacity=".5" />
-      <path d={MOUTH[state]} fill={state === "celebrate" ? "#7f1d1d" : "none"} stroke="#172033" strokeWidth="3" strokeLinecap="round" />
-      {/* state props */}
-      {state === "thinking" && (
-        <motion.g animate={{ rotate: 360 }} transition={{ duration: 3, repeat: Infinity, ease: "linear" }} style={{ originX: "60px", originY: "60px" }}>
-          <circle cx="104" cy="60" r="4" fill="#6d4aff" /><circle cx="16" cy="60" r="3" fill="#22c55e" />
-        </motion.g>
-      )}
-      {state === "refusing" && <path d="M96 78 l14 4 v12 c0 8 -8 12 -14 14 c-6 -2 -14 -6 -14 -14 v-12z" fill="#1d4ed8" stroke="#fff" strokeWidth="2" />}
-      {state === "conflict" && <g><text x="6" y="22" fontSize="16">⚖️</text></g>}
-      {state === "waiting" && <text x="92" y="30" fontSize="18">⏳</text>}
-      {state === "idk" && <text x="92" y="30" fontSize="20">🤷</text>}
-      {state === "celebrate" && <text x="4" y="24" fontSize="20">🎉</text>}
     </motion.svg>
   );
 }
