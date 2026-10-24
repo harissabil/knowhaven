@@ -51,7 +51,7 @@ class Settings(BaseSettings):
     llm_model_flash_fast: str = "gemini-3.6-flash"
     llm_model_flash: str = "gemini-3.7-flash"
     llm_flash_thinking_level: str = "low"
-    llm_compose_hedge_after_s: float = 8.0
+    llm_compose_hedge_after_s: float = 4.0  # 3.7-flash first token measured 6-21 s
     # Per-call budgets (seconds) and a global cap on concurrent model calls (quota safety).
     llm_timeout_lite_s: float = 15.0
     llm_timeout_flash_s: float = 30.0

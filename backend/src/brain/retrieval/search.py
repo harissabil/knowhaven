@@ -79,9 +79,16 @@ NO_PII = PiiPolicy()
 
 
 async def pii_policy(s: AsyncSession, ctx: RequestContext, needs_pii: bool) -> PiiPolicy:
-    """Raw PII only if the question needs it (step 2) AND a business role has the permission."""
+    """Raw PII only if the question needs it (step 2) AND a business role has the permission.
+    Company email domains are always loaded: work addresses aren't personal data (11.4)."""
+    emails = await s.scalars(
+        select(User.email)
+        .join(Membership, Membership.user_id == User.id)
+        .where(Membership.status == "active")
+    )
+    domains = frozenset(e.split("@")[1].lower() for e in emails) - FREE_MAIL
     if not needs_pii or not ctx.business_role_ids:
-        return PiiPolicy()
+        return PiiPolicy(frozenset(), domains)
     allowed = frozenset(
         await s.scalars(
             select(PiiPermission.pii_type).where(
@@ -89,14 +96,7 @@ async def pii_policy(s: AsyncSession, ctx: RequestContext, needs_pii: bool) -> P
             )
         )
     )
-    if not allowed:
-        return PiiPolicy()
-    emails = await s.scalars(
-        select(User.email)
-        .join(Membership, Membership.user_id == User.id)
-        .where(Membership.status == "active")
-    )
-    return PiiPolicy(allowed, frozenset(e.split("@")[1].lower() for e in emails) - FREE_MAIL)
+    return PiiPolicy(allowed, domains)
 
 
 def _visible_ids(ctx: RequestContext, types: tuple[str, ...], since: datetime | None):

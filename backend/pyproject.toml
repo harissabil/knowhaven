@@ -63,3 +63,6 @@ markers = ["live: calls the real Gemini API (skip with -m 'not live')"]
 "migrations/versions/*" = ["E501"]
 "tests/*" = ["E501"]  # fixtures are clearer on one line
 "src/brain/seed.py" = ["E501"]
+"src/brain/policy/*" = ["E501"]  # user-facing templates read better unwrapped
+"src/brain/agent/*" = ["E501"]
+"src/brain/api/chat.py" = ["E501"]
