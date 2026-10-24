@@ -240,7 +240,11 @@ async def source(citation_id: str, ctx: Member) -> SourceOut:
         )).first()  # fmt: skip
     # The original file is unmasked: offer it only if every kind of personal data in it is one the
     # user's roles may see. Otherwise the selectively masked text above is all they get.
-    if row and row.storage_key and {sp.get("type") for sp in (row.pii_spans or [])} <= policy.allowed:
+    if (
+        row
+        and row.storage_key
+        and {sp.get("type") for sp in (row.pii_spans or [])} <= policy.allowed
+    ):
         download = storage.presigned_get_url(row.storage_key, expires_in=300)
     return SourceOut(
         id=h.item_id, type=h.type, source=h.source, title=h.title, container=h.container, author=h.author,
