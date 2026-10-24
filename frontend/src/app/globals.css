@@ -1,42 +1,42 @@
 @import "tailwindcss";
 
 /*
-  Cloudflare-inspired: warm white canvas, ink text, one loud orange accent, pill buttons,
+  Blue-inspired: crisp cool canvas, ink text, one vibrant blue accent, pill buttons,
   hairline-bordered sections, big confident type. Dark theme keeps the same structure.
 */
 :root {
-  --bg: #fffdfb;
+  --bg: #fbfdff;
   --surface: #ffffff;
-  --surface-2: #faf6f1;
-  --border: #ece7e0;
-  --border-strong: #d8d1c7;
+  --surface-2: #f1f6fa;
+  --border: #e0e7ec;
+  --border-strong: #c7d1d8;
   --fg: #1d1d1f;
-  --muted: #6b6560;
-  --brand: #ff4801;
+  --muted: #60656b;
+  --brand: #0066ff;
   --brand-fg: #ffffff;
-  --brand-soft: #ffdd99;
-  --brand-tint: #fff1e8;
-  --accent: #ff9910;
+  --brand-soft: #99ccff;
+  --brand-tint: #e8f2ff;
+  --accent: #0ea5e9;
   --ok: #1a7f4b;
   --warn: #a35f00;
   --bad: #c0301f;
   --radius: 12px;
   --ease: cubic-bezier(0.25, 0.46, 0.45, 0.94);
-  --dark-bg: #0f0e0d;
+  --dark-bg: #0d0e11;
 }
 [data-theme="dark"] {
-  --bg: #0f0e0d;
-  --surface: #171615;
-  --surface-2: #201e1c;
-  --border: #2d2a27;
-  --border-strong: #3d3935;
-  --fg: #f5f1ec;
-  --muted: #a39b93;
-  --brand: #ff6a2b;
-  --brand-fg: #1a0900;
-  --brand-soft: #5a3a12;
-  --brand-tint: #2a1a10;
-  --accent: #ffb13d;
+  --bg: #0d0e11;
+  --surface: #14161a;
+  --surface-2: #1b1e24;
+  --border: #262a33;
+  --border-strong: #343945;
+  --fg: #ecf1f5;
+  --muted: #939ba3;
+  --brand: #3b82f6;
+  --brand-fg: #000c1a;
+  --brand-soft: #12345a;
+  --brand-tint: #101c2a;
+  --accent: #38bdf8;
   --ok: #4ade80;
   --warn: #fbbf24;
   --bad: #ff7a6b;
