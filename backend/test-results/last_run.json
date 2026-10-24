@@ -21,28 +21,33 @@
    "outcome": "passed"
   },
   "tests/test_hitl.py::test_access_request_lifecycle_and_security": {
-   "at": "2026-10-24T21:36:05+0700",
-   "duration_s": 7.0,
+   "at": "2026-10-24T22:19:18+0700",
+   "duration_s": 7.14,
    "outcome": "passed"
   },
   "tests/test_hitl.py::test_access_request_rejection": {
-   "at": "2026-10-24T21:36:22+0700",
-   "duration_s": 5.93,
+   "at": "2026-10-24T22:19:35+0700",
+   "duration_s": 5.49,
    "outcome": "passed"
   },
   "tests/test_hitl.py::test_action_draft_lifecycle_and_execution": {
-   "at": "2026-10-24T21:36:47+0700",
-   "duration_s": 13.0,
+   "at": "2026-10-24T22:20:03+0700",
+   "duration_s": 15.91,
    "outcome": "passed"
   },
   "tests/test_hitl.py::test_draft_rejection": {
-   "at": "2026-10-24T21:37:00+0700",
-   "duration_s": 1.54,
+   "at": "2026-10-24T22:20:17+0700",
+   "duration_s": 1.55,
    "outcome": "passed"
   },
   "tests/test_hitl.py::test_grant_expiration": {
-   "at": "2026-10-24T21:37:14+0700",
-   "duration_s": 3.19,
+   "at": "2026-10-24T22:20:31+0700",
+   "duration_s": 3.24,
+   "outcome": "passed"
+  },
+  "tests/test_hitl.py::test_me_reports_who_can_approve": {
+   "at": "2026-10-24T22:20:45+0700",
+   "duration_s": 1.91,
    "outcome": "passed"
   },
   "tests/test_infra.py::test_app_role_cannot_bypass_rls": {
@@ -141,53 +146,53 @@
    "outcome": "passed"
   },
   "tests/test_onboarding.py::test_create_company_bootstraps_roles": {
-   "at": "2026-10-24T21:39:23+0700",
-   "duration_s": 3.82,
+   "at": "2026-10-24T22:20:53+0700",
+   "duration_s": 3.98,
    "outcome": "passed"
   },
   "tests/test_onboarding.py::test_duplicate_email_rejected": {
-   "at": "2026-10-24T21:39:18+0700",
-   "duration_s": 0.91,
+   "at": "2026-10-24T22:20:49+0700",
+   "duration_s": 0.94,
    "outcome": "passed"
   },
   "tests/test_onboarding.py::test_invite_link_flow": {
-   "at": "2026-10-24T21:39:33+0700",
-   "duration_s": 10.18,
+   "at": "2026-10-24T22:21:03+0700",
+   "duration_s": 9.87,
    "outcome": "passed"
   },
   "tests/test_onboarding.py::test_join_code_is_pending_until_approved": {
-   "at": "2026-10-24T21:39:42+0700",
-   "duration_s": 9.29,
+   "at": "2026-10-24T22:21:12+0700",
+   "duration_s": 8.76,
    "outcome": "passed"
   },
   "tests/test_onboarding.py::test_non_admin_cannot_use_admin_endpoints": {
-   "at": "2026-10-24T21:40:15+0700",
-   "duration_s": 6.71,
+   "at": "2026-10-24T22:21:45+0700",
+   "duration_s": 6.57,
    "outcome": "passed"
   },
   "tests/test_onboarding.py::test_register_login_logout": {
-   "at": "2026-10-24T21:39:17+0700",
-   "duration_s": 2.89,
+   "at": "2026-10-24T22:20:48+0700",
+   "duration_s": 2.99,
    "outcome": "passed"
   },
   "tests/test_onboarding.py::test_reject_pending_member": {
-   "at": "2026-10-24T21:39:47+0700",
-   "duration_s": 5.0,
+   "at": "2026-10-24T22:21:17+0700",
+   "duration_s": 4.91,
    "outcome": "passed"
   },
   "tests/test_onboarding.py::test_removed_member_loses_access_and_tokens": {
-   "at": "2026-10-24T21:39:55+0700",
-   "duration_s": 7.75,
+   "at": "2026-10-24T22:21:25+0700",
+   "duration_s": 8.03,
    "outcome": "passed"
   },
   "tests/test_onboarding.py::test_state_changing_requests_need_csrf": {
-   "at": "2026-10-24T21:39:19+0700",
-   "duration_s": 0.8,
+   "at": "2026-10-24T22:20:49+0700",
+   "duration_s": 0.81,
    "outcome": "passed"
   },
   "tests/test_onboarding.py::test_tenant_switch_and_cross_tenant_isolation": {
-   "at": "2026-10-24T21:40:09+0700",
-   "duration_s": 13.32,
+   "at": "2026-10-24T22:21:39+0700",
+   "duration_s": 13.65,
    "outcome": "passed"
   },
   "tests/test_parsers.py::test_docx_headings_and_tables": {
@@ -551,5 +556,5 @@
    "outcome": "passed"
   }
  },
- "updated_at": "2026-10-24T21:44:42+0700"
+ "updated_at": "2026-10-24T22:21:46+0700"
 }
