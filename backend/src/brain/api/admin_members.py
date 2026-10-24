@@ -9,6 +9,7 @@ from sqlalchemy import func, select, update
 
 from brain.api.deps import Admin
 from brain.api.errors import http_error
+from brain.audit import log as audit
 from brain.config import get_settings
 from brain.db.models import Invite, MemberProfile, Membership, Role, Tenant, User, UserRole
 from brain.db.session import global_session, tenant_session
@@ -107,7 +108,11 @@ async def list_members(ctx: Admin) -> list[MemberOut]:
 async def approve(user_id: uuid.UUID, body: ApproveIn, ctx: Admin) -> None:
     try:
         async with tenant_session(ctx.tenant_id) as s:
+            keys = set(await s.scalars(select(Role.key).where(Role.id.in_(body.role_ids))))
+            if "owner" in keys and "owner" not in ctx.role_keys:
+                raise HTTPException(status.HTTP_403_FORBIDDEN, "owner_required")
             await service.approve_member(s, ctx.tenant_id, user_id, body.role_ids, ctx.user_id)
+            await audit.admin_event(s, ctx, "member.approve", user_id=user_id, roles=sorted(keys))
     except TenancyError as e:
         raise http_error(e) from None
 
@@ -117,6 +122,7 @@ async def reject(user_id: uuid.UUID, ctx: Admin) -> None:
     try:
         async with tenant_session(ctx.tenant_id) as s:
             await service.reject_member(s, user_id)
+            await audit.admin_event(s, ctx, "member.reject", user_id=user_id)
     except TenancyError as e:
         raise http_error(e) from None
 
@@ -128,6 +134,7 @@ async def remove(user_id: uuid.UUID, ctx: Admin) -> None:
     try:
         async with tenant_session(ctx.tenant_id) as s:
             await service.remove_member(s, ctx.tenant_id, user_id)
+            await audit.admin_event(s, ctx, "member.remove", user_id=user_id)
     except TenancyError as e:
         raise http_error(e) from None
 
@@ -173,6 +180,9 @@ async def create_invite(body: InviteIn, ctx: Admin) -> InviteOut:
                 body.max_uses,
             )
             role_key = await s.scalar(select(Role.key).where(Role.id == body.role_id))
+            await audit.admin_event(
+                s, ctx, "invite.create", invite_id=invite.id, role=role_key, max_uses=body.max_uses
+            )
     except TenancyError as e:
         raise http_error(e) from None
     link = f"{get_settings().web_origin}/join/{token}"
@@ -187,8 +197,9 @@ async def revoke_invite(invite_id: uuid.UUID, ctx: Admin) -> None:
             .where(Invite.id == invite_id, Invite.revoked_at.is_(None))
             .values(revoked_at=func.now())
         )
-    if result.rowcount == 0:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "invite_not_found")
+        if result.rowcount == 0:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "invite_not_found")
+        await audit.admin_event(s, ctx, "invite.revoke", invite_id=invite_id)
 
 
 @router.get("/join-code")
@@ -202,6 +213,7 @@ async def get_join_code(ctx: Admin) -> JoinCodeOut:
 async def rotate_join_code(ctx: Admin) -> JoinCodeOut:
     async with tenant_session(ctx.tenant_id) as s:
         code = await service.rotate_join_code(s, ctx.tenant_id)
+        await audit.admin_event(s, ctx, "join_code.rotate")
     return JoinCodeOut(join_code=code)
 
 

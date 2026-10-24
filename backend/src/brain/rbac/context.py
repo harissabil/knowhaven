@@ -22,6 +22,8 @@ class RequestContext:
     membership_status: str  # pending | active
     role_keys: frozenset[str]
     role_ids: frozenset[UUID]
+    # Only business roles grant content access; system roles grant configuration (4.1).
+    business_role_ids: frozenset[UUID]
     temp_grant_container_ids: frozenset[UUID]
     permission_version: int
 
@@ -44,12 +46,12 @@ async def load_context(s: AsyncSession, tenant_id: UUID, user_id: UUID) -> Reque
     if status not in ("pending", "active"):
         return None
 
-    roles: list[tuple[UUID, str]] = []
+    roles: list[tuple[UUID, str, bool]] = []
     grants: list[UUID] = []
     if status == "active":
         roles = (
             await s.execute(
-                select(Role.id, Role.key)
+                select(Role.id, Role.key, Role.is_system)
                 .join(
                     UserRole, (UserRole.role_id == Role.id) & (UserRole.tenant_id == Role.tenant_id)
                 )
@@ -72,8 +74,9 @@ async def load_context(s: AsyncSession, tenant_id: UUID, user_id: UUID) -> Reque
         user_id=user_id,
         tenant_id=tenant_id,
         membership_status=status,
-        role_keys=frozenset(k for _, k in roles),
-        role_ids=frozenset(i for i, _ in roles),
+        role_keys=frozenset(k for _, k, _ in roles),
+        role_ids=frozenset(i for i, _, _ in roles),
+        business_role_ids=frozenset(i for i, _, system in roles if not system),
         temp_grant_container_ids=frozenset(grants),
         permission_version=version,
     )

@@ -14,6 +14,7 @@ from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from brain.audit import log as audit
 from brain.db.models import (
     Invite,
     McpToken,
@@ -107,7 +108,9 @@ async def create_tenant(
             for t in pii_types
         )
     await s.flush()
-    return await _set_join_code(s, tenant_id)
+    code = await _set_join_code(s, tenant_id)
+    await audit.membership_event(s, tenant_id, creator_id, "tenant.create", name=name.strip())
+    return code
 
 
 async def rotate_join_code(s: AsyncSession, tenant_id: uuid.UUID) -> str:
@@ -191,6 +194,7 @@ async def accept_invite(
         .on_conflict_do_nothing()
     )
     await bump_permission_version(s, tenant_id)
+    await audit.membership_event(s, tenant_id, user_id, "invite.accept", invite_id=invite_id)
     return "active"
 
 
@@ -200,6 +204,7 @@ async def request_join(s: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID
     if existing in ("active", "pending"):
         return existing
     await _upsert_membership(s, tenant_id, user_id, "pending")
+    await audit.membership_event(s, tenant_id, user_id, "join_code.request")
     return "pending"
 
 

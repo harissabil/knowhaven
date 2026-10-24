@@ -60,6 +60,12 @@ class ApiUser:
     async def delete(self, url: str, **kw) -> httpx.Response:
         return await self.request("DELETE", url, **kw)
 
+    async def put(self, url: str, **kw) -> httpx.Response:
+        return await self.request("PUT", url, **kw)
+
+    async def patch(self, url: str, **kw) -> httpx.Response:
+        return await self.request("PATCH", url, **kw)
+
 
 @pytest.fixture
 async def make_user():

@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from brain.api.auth import MeOut, build_me
 from brain.api.deps import Auth, Context, Member
 from brain.api.errors import http_error
+from brain.audit import log as audit
 from brain.auth.sessions import set_active_tenant
 from brain.db.session import global_session, tenant_session
 from brain.tenancy import service
@@ -106,6 +107,7 @@ async def leave_tenant(ctx: Context, auth: Auth) -> None:
     try:
         async with tenant_session(ctx.tenant_id) as s:
             await service.remove_member(s, ctx.tenant_id, ctx.user_id)
+            await audit.membership_event(s, ctx.tenant_id, ctx.user_id, "tenant.leave")
     except TenancyError as e:
         raise http_error(e) from None
     async with global_session() as s:
