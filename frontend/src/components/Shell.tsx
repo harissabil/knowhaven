@@ -7,7 +7,7 @@ import { useSession, usePersona, useTenants } from "@/store/session";
 import { can, NAV, NAV_SECTIONS } from "@/lib/permissions";
 import { motion } from "framer-motion";
 import { useL, useT, type Key } from "@/lib/i18n";
-import { Mascot } from "@/components/mascot/Mascot";
+import { KnowhavenLogo } from "@/components/BrandLogos";
 import { Launcher, Palette } from "@/components/Extras";
 
 const ICON: Record<string, React.ReactNode> = {
@@ -55,8 +55,8 @@ export function Shell({ children, title, fullBleed }: { children: React.ReactNod
   return (
     <div className={`flex ${fullBleed ? "h-screen overflow-hidden" : "min-h-screen"}`}>
       {!wizard && <aside className="w-64 shrink-0 border-r border-line bg-surface p-4 hidden md:flex flex-col gap-1 sticky top-0 h-screen overflow-y-auto">
-        <Link href="/" className="flex items-center gap-2 mb-5 font-semibold text-lg tracking-tight">
-          <Mascot size={44} /> Knowhaven
+        <Link href="/" className="flex items-center gap-2.5 mb-5 font-semibold text-lg tracking-tight">
+          <KnowhavenLogo size={28} /> Knowhaven
         </Link>
         {NAV_SECTIONS.map((sec) => {
           const group = items.filter((n) => n.section === sec);
@@ -79,7 +79,7 @@ export function Shell({ children, title, fullBleed }: { children: React.ReactNod
       </aside>}
       <div className={`flex-1 flex flex-col min-w-0 ${fullBleed ? "h-full overflow-hidden" : ""}`}>
         <header className="sticky top-0 z-10 flex flex-wrap items-center gap-2 border-b border-line bg-bg/80 backdrop-blur-md px-5 py-3 shrink-0">
-          {wizard ? <span className="flex items-center gap-2 font-bold"><Mascot size={36} /> Knowhaven</span> : (
+          {wizard ? <span className="flex items-center gap-2.5 font-bold"><KnowhavenLogo size={28} /> Knowhaven</span> : (
             <select className={sel} aria-label={t("tenant")} value={s.tenantId ?? ""} onChange={(e) => { setSwitchErr(""); s.setTenant(e.target.value).catch((x) => setSwitchErr(String(x?.message ?? x))); }}>
               {myTenants.map((x) => <option key={x.id} value={x.id}>{x.name}{x.status === "pending" ? ` (${l("menunggu", "pending")})` : ""}</option>)}
             </select>

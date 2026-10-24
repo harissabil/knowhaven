@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useSession } from "@/store/session";
 import { useL, useT } from "@/lib/i18n";
 import { Mascot, SpeechBubble } from "@/components/mascot/Mascot";
+import { KnowhavenLogo } from "@/components/BrandLogos";
 import { ApiError, errorText } from "@/lib/api";
 
 // Seeded demo accounts (backend/seed/*/manifest.json). Shown on purpose (doc §14.3); these are
@@ -54,7 +55,7 @@ export default function Login() {
     <div className="min-h-screen grid md:grid-cols-2">
       <div className="relative hidden md:flex flex-col items-center justify-center gap-6 p-10 text-center overflow-hidden border-r border-line bg-tint"
         style={{ backgroundImage: "radial-gradient(var(--border-strong) 1px, transparent 1px)", backgroundSize: "20px 20px" }}>
-        <Link href="/" className="absolute top-6 left-6 font-semibold text-lg tracking-tight">Knowhaven</Link>
+        <Link href="/" className="absolute top-6 left-6 flex items-center gap-2.5 font-semibold text-lg tracking-tight"><KnowhavenLogo size={26} /> Knowhaven</Link>
         <motion.div animate={{ y: [0, -12, 0] }} transition={{ duration: 3.4, repeat: Infinity, ease: "easeInOut" }}><Mascot size={220} state="idle" /></motion.div>
         <SpeechBubble>
           {l("Halo! Saya ", "Hi! I'm ")}<b>Havi</b>

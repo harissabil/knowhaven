@@ -147,6 +147,30 @@ def test_pii_output_guard_masks_disallowed_types():
     assert "081399887766" in hr.text and hr.pii_masked == 0
 
 
+def test_pii_output_guard_partial_combination_nik_and_npwp():
+    src = (
+        "NIK: 3201234501900001, NPWP: 12.345.678.9-012.345, "
+        "HP: 0812****7890, Email: r***@gmail.com, Rek BCA: ******7890"
+    )
+    ans = (
+        "Data Rina adalah NIK 3201234501900001, NPWP 12.345.678.9-012.345, "
+        "HP 0812-3456-7890, email rina.w@gmail.com, dan rekening BCA 1234567890 [DOC-hr-1]."
+    )
+    v = validate.validate(
+        ans,
+        {"DOC-hr-1": src},
+        "data rina?",
+        frozenset({"nik", "npwp"}),
+    )
+    assert v.ok, v.problems
+    assert "3201234501900001" in v.text
+    assert "12.345.678.9-012.345" in v.text
+    assert "0812****7890" in v.text
+    assert "r***@gmail.com" in v.text
+    assert "******7890" in v.text
+    assert v.pii_masked == 3
+
+
 @pytest.mark.parametrize(
     ("question", "roles", "expected"),
     [

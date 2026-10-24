@@ -36,7 +36,7 @@ class Understanding(BaseModel):
     source_types: list[Literal["chat", "doc", "task"]] = Field(default_factory=list)
     task_filters: TaskFilters | None = None
     needs_pii: bool = Field(
-        description="true only if answering requires personal data such as NIK or phone numbers"
+        description="true only if answering requires personal data such as NIK, NPWP, phone, email, or bank account"
     )
 
 

@@ -1,6 +1,27 @@
 // Simplified inline marks for the integration cards. Swap in the official brand assets before launch.
 const P = { viewBox: "0 0 24 24", width: 28, height: 28, "aria-hidden": true } as const;
 
+export function KnowhavenLogo({ size = 28, className }: { size?: number; className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="96 56 808 598"
+      width={size}
+      height={Math.round((size * 598) / 808)}
+      role="img"
+      aria-labelledby="knowhaven-logo-title"
+      className={className}
+    >
+      <title id="knowhaven-logo-title">Knowhaven</title>
+      <g fill="none" stroke="currentColor" strokeWidth="72" strokeLinecap="round">
+        <path d="M142 608V460A358 358 0 0 1 858 460V608" />
+        <path d="M250 608V460A250 250 0 0 1 750 460V608" />
+        <path d="M358 608V460A142 142 0 0 1 642 460V608" />
+      </g>
+    </svg>
+  );
+}
+
 export function SlackLogo() {
   return (
     <svg {...P}>

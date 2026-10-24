@@ -12,10 +12,13 @@ PII_TYPES = ("nik", "phone", "email", "npwp", "bank_account")
 NIK_RE = re.compile(r"(?<!\d)(\d{16})(?!\d)")
 PHONE_RE = re.compile(r"(?<![\d+])((?:\+62|62|0)[\s-]?8\d{1,2}(?:[\s-]?\d){6,9})(?!\d)")
 EMAIL_RE = re.compile(r"(?<![\w.+-])([A-Za-z0-9._%+-]+@((?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,}))")
-NPWP_RE = re.compile(r"(?<!\d)(\d{2}\.\d{3}\.\d{3}\.\d-\d{3}\.\d{3})(?!\d)")
+NPWP_RE = re.compile(
+    r"(?i)(?:(?<!\d)(\d{2}[.-]\d{3}[.-]\d{3}[.-]\d[.-]\d{3}[.-]\d{3})(?!\d)"
+    r"|\bnpwp\b[^\d\n,;|]{0,15}((?:\d[\s.-]?){14,15}\d)(?!\d))"
+)
 BANK_RE = re.compile(
     r"(?i)\b(?:no\.?\s*rek(?:ening)?|rekening|rek|account|acc|bca|bni|bri|mandiri|bsi|cimb|btn)\b"
-    r"[^\d\n]{0,25}((?:\d[\s-]?){9,15}\d)(?!\d)"
+    r"(?:(?![,\n;|]|\b(?:nik|npwp|hp|telp|telepon|phone)\b)[^\d]){0,25}((?:\d[\s-]?){9,15}\d)(?!\d)"
 )
 
 
@@ -42,7 +45,8 @@ def detect(text: str, company_domains: frozenset[str] = frozenset()) -> list[Pii
     phone, email. Emails on a company domain are work contacts, not personal data."""
     found: list[PiiSpan] = []
     for m in NPWP_RE.finditer(text):
-        found.append(PiiSpan("npwp", m.start(1), m.end(1)))
+        g = 1 if m.group(1) else 2
+        found.append(PiiSpan("npwp", m.start(g), m.end(g)))
     for m in BANK_RE.finditer(text):
         found.append(PiiSpan("bank_account", m.start(1), m.end(1)))
     for m in NIK_RE.finditer(text):
