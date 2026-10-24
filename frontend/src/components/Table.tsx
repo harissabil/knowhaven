@@ -1,5 +1,6 @@
 "use client";
 import { motion } from "framer-motion";
+import { StatusChip, type Tone } from "@/components/Chip";
 
 export function Table({ head, rows }: { head: string[]; rows: React.ReactNode[][] }) {
   return (
@@ -20,13 +21,13 @@ export function Table({ head, rows }: { head: string[]; rows: React.ReactNode[][
   );
 }
 
-const TONE: Record<string, string> = {
-  open: "text-ok", gated: "text-warn", hidden: "text-bad", pass: "text-ok", fail: "text-bad",
-  pending: "text-warn", ok: "text-ok", error: "text-bad",
-  passed: "text-ok", failed: "text-bad", not_run: "text-muted", skipped: "text-muted",
-  active: "text-ok", approved: "text-ok", executed: "text-ok", rejected: "text-bad", revoked: "text-bad",
-  expired: "text-muted", unmapped: "text-bad",
+const TONE: Record<string, Tone> = {
+  open: "ok", gated: "warn", hidden: "bad", pass: "ok", fail: "bad",
+  pending: "warn", ok: "ok", error: "bad",
+  passed: "ok", failed: "bad", not_run: "muted", skipped: "muted",
+  active: "ok", approved: "ok", executed: "ok", rejected: "bad", revoked: "bad",
+  expired: "muted", unmapped: "bad",
 };
 export function Badge({ v }: { v: string }) {
-  return <span className={`inline-flex items-center gap-1.5 rounded border border-line2 px-2 py-0.5 font-mono text-xs ${TONE[v] ?? ""}`}><span className="w-1.5 h-1.5 rounded-full bg-current" />{v}</span>;
+  return <StatusChip tone={TONE[v] ?? "muted"}>{v.replace(/_/g, " ")}</StatusChip>;
 }

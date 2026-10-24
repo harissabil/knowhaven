@@ -206,11 +206,11 @@ export default function Setup() {
             {w.step === 5 && (
               <div className="grid md:grid-cols-2 gap-6">
                 <div className="flex flex-col gap-4">
-                  <label className="flex flex-col gap-1.5 font-medium">{l("Approver (menyetujui akses dan draf aksi)", "Approver (approves access and action drafts)")}
+                  <label className="field">{l("Approver (menyetujui akses dan draf aksi)", "Approver (approves access and action drafts)")}
                     <input className="input font-normal" value={w.approver} onChange={(e) => patch({ approver: e.target.value })} placeholder={l("Nama atau email", "Name or email")} /></label>
-                  <label className="flex flex-col gap-1.5 font-medium">{l("Pemilik topik (rujukan saat Havi tidak tahu)", "Topic owner (who Havi points to when it doesn't know)")}
+                  <label className="field">{l("Pemilik topik (rujukan saat Havi tidak tahu)", "Topic owner (who Havi points to when it doesn't know)")}
                     <input className="input font-normal" value={w.topicOwner} onChange={(e) => patch({ topicOwner: e.target.value })} placeholder={l("mis. HR", "e.g. HR")} /></label>
-                  <label className="flex flex-col gap-1.5 font-medium">{l("Kontak cadangan umum", "General fallback contact")}
+                  <label className="field">{l("Kontak cadangan umum", "General fallback contact")}
                     <input className="input font-normal" value={w.fallback} onChange={(e) => patch({ fallback: e.target.value })} placeholder="helpdesk@company.com" /></label>
                 </div>
                 <div className="flex flex-col gap-4">

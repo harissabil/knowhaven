@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Shell } from "@/components/Shell";
 import { Table } from "@/components/Table";
+import { NeutralChip } from "@/components/Chip";
 import { useL, useT } from "@/lib/i18n";
 import { apiFetch, errorText } from "@/lib/api";
 import type { ContainerOut, ManagerOut, MemberOut, TopicOut } from "@/lib/contracts";
@@ -97,40 +98,43 @@ export default function Managers() {
       <Table
         head={[l("Lingkup", "Scope"), l("Target", "Target"), "Manager", ""]}
         rows={managers.map((m) => [
-          scopeLabel(m.scope_type),
+          <NeutralChip key="s">{scopeLabel(m.scope_type)}</NeutralChip>,
           targetName(m),
-          memberName(m.manager_user_id),
-          <button key="d" className="btn !py-1 !px-2 text-xs" onClick={() => remove(m.id)} aria-label={l("Hapus", "Remove")}><Trash2 size={13} /></button>,
+          <span key="m" className="font-medium">{memberName(m.manager_user_id)}</span>,
+          <button key="d" className="btn !py-1 !px-2 text-xs ml-auto flex" onClick={() => remove(m.id)} aria-label={l("Hapus", "Remove")}><Trash2 size={13} /></button>,
         ])}
       />
 
-      <div className="card p-4 mt-5 flex flex-wrap gap-2 items-end">
-        <label className="flex flex-col gap-1 text-sm">{l("Lingkup", "Scope")}
-          <select className="input !w-auto" value={scope} onChange={(e) => { setScope(e.target.value as Scope); setScopeId(""); }}>
-            <option value="container">Container</option>
-            <option value="topic">{l("Topik", "Topic")}</option>
-            <option value="department">{l("Departemen", "Department")}</option>
-          </select>
-        </label>
-        <label className="flex flex-col gap-1 text-sm">{l("Target", "Target")}
-          {scope === "department" ? (
-            <input className="input" list="depts" value={scopeId} onChange={(e) => setScopeId(e.target.value)} />
-          ) : (
-            <select className="input !w-auto" value={scopeId} onChange={(e) => setScopeId(e.target.value)}>
-              <option value="">—</option>
-              {options.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+      <div className="card p-6 mt-6 flex flex-col gap-6">
+        <div className="grid gap-5 sm:grid-cols-3">
+          <label className="field">{l("Lingkup", "Scope")}
+            <select className="input" value={scope} onChange={(e) => { setScope(e.target.value as Scope); setScopeId(""); }}>
+              <option value="container">Container</option>
+              <option value="topic">{l("Topik", "Topic")}</option>
+              <option value="department">{l("Departemen", "Department")}</option>
             </select>
-          )}
-          <datalist id="depts">{departments.map((d) => <option key={d} value={d} />)}</datalist>
-        </label>
-        <label className="flex flex-col gap-1 text-sm">Manager
-          <select className="input !w-auto" value={managerId} onChange={(e) => setManagerId(e.target.value)}>
-            <option value="">—</option>
-            {members.map((m) => <option key={m.user_id} value={m.user_id}>{m.name}</option>)}
-          </select>
-        </label>
-        <button className="btn btn-primary" onClick={add} disabled={!scopeId || !managerId}><Plus size={14} /> {l("Tambah", "Add")}</button>
-      </div>
-    </Shell>
+          </label>
+          <label className="field">{l("Target", "Target")}
+            {scope === "department" ? (
+              <input className="input" list="depts" value={scopeId} onChange={(e) => setScopeId(e.target.value)} />
+            ) : (
+              <select className="input" value={scopeId} onChange={(e) => setScopeId(e.target.value)}>
+                <option value="">—</option>
+                {options.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+              </select>
+            )}
+            <datalist id="depts">{departments.map((d) => <option key={d} value={d} />)}</datalist>
+          </label>
+          <label className="field">Manager
+            <select className="input" value={managerId} onChange={(e) => setManagerId(e.target.value)}>
+              <option value="">—</option>
+              {members.map((m) => <option key={m.user_id} value={m.user_id}>{m.name}</option>)}
+            </select>
+          </label>
+        </div>
+        <div className="flex justify-end pt-5 border-t border-line">
+          <button className="btn btn-primary" onClick={add} disabled={!scopeId || !managerId}><Plus size={14} /> {l("Tambah", "Add")}</button>
+        </div>
+      </div>    </Shell>
   );
 }
