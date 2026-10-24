@@ -90,8 +90,8 @@ const C = {
 };
 
 const MARQUEE = [
-  { name: "Slack", logo: "Slack", on: true }, { name: "Confluence", logo: "Atlassian", on: true },
-  { name: "Jira", logo: "Atlassian", on: true }, { name: "WhatsApp", logo: "WhatsApp", on: false },
+  { name: "Slack", logo: "Slack", on: true }, { name: "Confluence", logo: "Confluence", on: true },
+  { name: "Jira", logo: "Jira", on: true }, { name: "WhatsApp", logo: "WhatsApp", on: false },
   { name: "Telegram", logo: "Telegram", on: false },
 ];
 

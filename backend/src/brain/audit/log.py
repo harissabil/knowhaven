@@ -133,7 +133,13 @@ async def admin_event(
 
 
 async def membership_event(
-    s: AsyncSession, tenant_id: UUID, user_id: UUID, action: str, **details
+    s: AsyncSession,
+    tenant_id: UUID,
+    user_id: UUID,
+    action: str,
+    *,
+    channel: str = "web",
+    **details,
 ) -> AuditLog:
     """A user acting on their own membership (create company, accept invite, join, leave)."""
     return await append(
@@ -141,7 +147,7 @@ async def membership_event(
         tenant_id,
         "membership",
         actor_user_id=user_id,
-        channel="web",
+        channel=channel,
         permission_version=await s.scalar(select(PermissionState.version)),
         details={"action": action, **jsonable(details)},
     )

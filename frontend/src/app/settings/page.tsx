@@ -1,8 +1,9 @@
 "use client";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Sun, Moon, ZoomIn, ZoomOut, RotateCcw, Type, Globe, KeyRound, Check } from "lucide-react";
+import { Sun, Moon, ZoomIn, ZoomOut, RotateCcw, Type, Globe, Check } from "lucide-react";
 import { Shell } from "@/components/Shell";
+import { WorkBuddyLogo } from "@/components/BrandLogos";
 import { usePersona, useSession } from "@/store/session";
 import { can } from "@/lib/permissions";
 import { CompanyProfileCard } from "@/components/CompanyProfile";
@@ -250,8 +251,8 @@ export default function SettingsPage() {
         {/* 4. External Integrations / WorkBuddy Shortcut */}
         <section className="card p-6 flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-3.5">
-            <span className="w-10 h-10 rounded-full bg-brand-tint text-brand grid place-items-center shrink-0">
-              <KeyRound size={20} />
+            <span className="w-10 h-10 grid place-items-center shrink-0">
+              <WorkBuddyLogo size={36} />
             </span>
             <div>
               <p className="font-semibold">{t("workbuddy")}</p>

@@ -6,7 +6,7 @@ import { newWizard, useSession, useTenants, type WContainer, type Wizard } from 
 import { useL } from "@/lib/i18n";
 import { LOGOS } from "@/components/BrandLogos";
 
-const Logo = ({ name }: { name: string }) => { const L = LOGOS[name]; return L ? <L /> : null; };
+const Logo = ({ name }: { name: string }) => { const L = LOGOS[name]; return L ? <L size={28} /> : null; };
 
 const SOON = ["WhatsApp", "Telegram"];
 const SLACK_CH = ["#general", "#pengumuman-hr", "#ops"];

@@ -6,8 +6,8 @@ import { FileText } from "lucide-react";
 
 const SOURCES = [
   { name: "Slack", logo: "Slack" },
-  { name: "Confluence", logo: "Atlassian" },
-  { name: "Jira", logo: "Atlassian" },
+  { name: "Confluence", logo: "Confluence" },
+  { name: "Jira", logo: "Jira" },
   { name: "WhatsApp", logo: "WhatsApp" },
   { name: "PDF / DOCX", logo: "" },
 ];
@@ -42,7 +42,7 @@ export function FlowScene({ lang }: { lang: "id" | "en" }) {
           <motion.div key={s.name} className="card absolute flex items-center gap-2 px-3 py-1.5 !rounded-full shadow-sm"
             style={{ left: 0, top: `${(ys[i] / H) * 100}%`, transform: "translateY(-50%)" }}
             initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.15 * i, duration: 0.5 }}>
-            <span className="w-6 h-6 grid place-items-center scale-[0.8]">{L ? <L /> : <FileText size={18} />}</span>
+            <span className="w-5 h-5 grid place-items-center shrink-0">{L ? <L size={18} /> : <FileText size={18} />}</span>
             <span className="text-sm font-medium hidden sm:inline">{s.name}</span>
           </motion.div>
         );

@@ -96,7 +96,16 @@ async def test_tools_answers_and_identity(org, mcp_url):  # noqa: F811
         rows = (
             await db.scalars(select(AuditLog.channel).where(AuditLog.event_type == "query"))
         ).all()
+        mcp_events = (
+            await db.scalars(select(AuditLog.details).where(AuditLog.event_type == "mcp"))
+        ).all()
     assert rows.count("mcp") == 2
+    assert [e["action"] for e in mcp_events] == [
+        "mcp.whoami",
+        "mcp.open_source",
+        "mcp.open_source",
+        "mcp.open_source",
+    ]
 
 
 async def test_role_change_applies_and_removal_revokes(org, mcp_url):  # noqa: F811
