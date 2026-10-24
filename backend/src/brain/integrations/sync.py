@@ -8,9 +8,10 @@ Rules
   project with the same key, or a Slack channel with the same name, takes over that container
   (and its role mapping); a live page/issue with the same title takes over the imported item, so
   citation IDs such as DOC-sop-reimbursement#3 stay valid.
-- Deletion: an item that came from this live site (its URL starts with the site) and is no longer
-  returned is soft-deleted, so it stops being cited. Imported items that were never adopted are
-  left alone.
+- Source of truth: once a site is connected, it IS the company's Confluence/Jira. Every page or
+  issue of that source that the site no longer returns is soft-deleted, so it stops being cited:
+  pages deleted in Confluence, and imported copies that no live page took over (so two diverging
+  versions of e.g. a salary table never compete as a false conflict).
 """
 
 import logging
@@ -124,22 +125,21 @@ async def _adopt_items(tenant_id: uuid.UUID, items: list[IngestItem], site: str)
     return adopted
 
 
-async def _tombstones(tenant_id: uuid.UUID, source: str, container_ext_ids: set[str], live_refs: set[str],
-                      site: str) -> list[IngestItem]:  # fmt: skip
+async def _tombstones(tenant_id: uuid.UUID, source: str, live_refs: set[str]) -> list[IngestItem]:
+    """Everything of this source the live site didn't return (see "Source of truth" above)."""
     kind = CONTAINER_KIND[source]
     async with tenant_session(tenant_id) as s:
         rows = (await s.execute(
             select(SourceItem, Container.external_id, Container.name)
             .join(Container, (Container.id == SourceItem.container_id) & (Container.tenant_id == SourceItem.tenant_id))
-            .where(SourceItem.source == source, SourceItem.deleted_at.is_(None), Container.source == kind,
-                   Container.external_id.in_(sorted(container_ext_ids)))
+            .where(SourceItem.source == source, SourceItem.deleted_at.is_(None), Container.source == kind)
         )).all()  # fmt: skip
     now = datetime.now(UTC)
     return [
         IngestItem(source=source, container_external_id=ext, container_name=name, external_ref=it.external_ref,
                    type=it.type, text="", created_at=it.created_at, updated_at=now, deleted=True)
         for it, ext, name in rows
-        if it.external_ref not in live_refs and (it.url or "").startswith(site)
+        if it.external_ref not in live_refs
     ]  # fmt: skip
 
 
@@ -165,7 +165,6 @@ async def sync_atlassian(
                         tenant_id, "confluence_space", [(sp.key, sp.name) for sp in spaces]
                     )
                     items = [page_to_item(p, sp, site) for sp in spaces for p in await c.pages(sp)]
-                    scope = {sp.key for sp in spaces}
                     meta = {"spaces": len(spaces), "pages": len(items)}
                 else:
                     projects = await c.projects()
@@ -179,12 +178,9 @@ async def sync_atlassian(
                         else []
                     )
                     items = [issue_item(i, site) for i in issues]
-                    scope = {p.key for p in projects}
                     meta = {"projects": len(projects), "issues": len(items)}
             adopted = await _adopt_items(tenant_id, items, site)
-            gone = await _tombstones(
-                tenant_id, type_, scope, {it.external_ref for it in items}, site
-            )
+            gone = await _tombstones(tenant_id, type_, {it.external_ref for it in items})
             r = await ingestor.ingest(tenant_id, items + gone)
             meta |= {
                 "last_created": r.created,
