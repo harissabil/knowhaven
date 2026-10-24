@@ -3,13 +3,16 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { Sun, Moon, ZoomIn, ZoomOut, RotateCcw, Type, Globe, KeyRound, Check } from "lucide-react";
 import { Shell } from "@/components/Shell";
-import { useSession } from "@/store/session";
+import { usePersona, useSession } from "@/store/session";
+import { can } from "@/lib/permissions";
+import { CompanyProfileCard } from "@/components/CompanyProfile";
 import { useL, useT } from "@/lib/i18n";
 
 export default function SettingsPage() {
   const t = useT();
   const l = useL();
   const s = useSession();
+  const { roles } = usePersona();
 
   const currentPercent = Math.round(s.fontScale * 100);
 
@@ -39,6 +42,8 @@ export default function SettingsPage() {
         </div>
 
         {/* 1. Theme / Dark Mode Section */}
+        {can(roles, "admin") && <CompanyProfileCard />}
+
         <section className="card p-6 flex flex-col gap-4">
           <div>
             <h2 className="text-lg font-semibold flex items-center gap-2">

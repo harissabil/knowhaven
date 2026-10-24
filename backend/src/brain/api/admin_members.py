@@ -234,19 +234,24 @@ async def list_roles(ctx: Admin) -> list[RoleOut]:
 class TenantSettingsIn(BaseModel):
     name: str | None = Field(default=None, min_length=2, max_length=120)
     default_contact: str | None = Field(default=None, min_length=1, max_length=200)
+    # Public company facts (founded, address, what the company does...). Visible to every member.
+    profile: str | None = Field(default=None, max_length=4000)
 
 
 class TenantSettingsOut(BaseModel):
     name: str
     slug: str
     default_contact: str | None
+    profile: str | None
 
 
 @router.get("/tenant")
 async def get_tenant_settings(ctx: Admin) -> TenantSettingsOut:
     async with tenant_session(ctx.tenant_id) as s:
         t = await s.scalar(select(Tenant))
-    return TenantSettingsOut(name=t.name, slug=t.slug, default_contact=t.default_contact)
+    return TenantSettingsOut(
+        name=t.name, slug=t.slug, default_contact=t.default_contact, profile=t.profile
+    )
 
 
 @router.patch("/tenant")
@@ -257,4 +262,6 @@ async def update_tenant_settings(body: TenantSettingsIn, ctx: Admin) -> TenantSe
         for k, v in changes.items():
             setattr(t, k, v)
         await audit.admin_event(s, ctx, "tenant.update", fields=sorted(changes))
-    return TenantSettingsOut(name=t.name, slug=t.slug, default_contact=t.default_contact)
+    return TenantSettingsOut(
+        name=t.name, slug=t.slug, default_contact=t.default_contact, profile=t.profile
+    )

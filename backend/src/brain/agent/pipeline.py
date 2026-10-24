@@ -42,7 +42,7 @@ from brain.policy import conflict, idk, refusal
 from brain.policy.validate import Validation, validate
 from brain.rbac.context import RequestContext
 from brain.retrieval.search import Hit, SearchResult, pii_policy
-from brain.retrieval.tools import Retriever, format_hits
+from brain.retrieval.tools import COMPANY_PROFILE_ID, Retriever, format_hits
 
 HISTORY_TURNS = 3
 MAX_EVIDENCE_HITS = 16
@@ -507,6 +507,9 @@ class _Run:
             tf = und.task_filters
             jobs.append(r.query_tasks(tf.project, tf.status, tf.assignee, tf.entity or (und.entities[0] if und.entities else None))
                         if tf else r.query_tasks(entity=und.entities[0] if und.entities else None))  # fmt: skip
+        jobs.append(
+            r.company_profile()
+        )  # common knowledge: always available, never crowds out evidence
         await asyncio.gather(*jobs)
 
     def _found_summary(self) -> str:
@@ -517,7 +520,9 @@ class _Run:
 
     def _evidence_hits(self) -> list[Hit]:
         uniq = {h.citation_id: h for h in self.retriever.seen.values()}
-        return sorted(uniq.values(), key=lambda h: (-h.score, h.citation_id))[:MAX_EVIDENCE_HITS]
+        profile = uniq.pop(COMPANY_PROFILE_ID, None)
+        top = sorted(uniq.values(), key=lambda h: (-h.score, h.citation_id))[:MAX_EVIDENCE_HITS]
+        return top + [profile] if profile else top
 
     def _allowed_texts(self) -> dict[str, str]:
         out: dict[str, str] = {}

@@ -52,6 +52,7 @@ class TraceStepOut(BaseModel):
     ms: int | None
     summary: str | None
     detail: dict | None = None  # auditor view only
+    started_at: datetime | None = None  # auditor view only: drives the timeline
 
 
 class QueryDetailOut(BaseModel):
@@ -116,6 +117,7 @@ def _ms(t: TraceEvent) -> int | None:
 async def audit_log(
     ctx: Auditor,
     event_type: str | None = None,
+    exclude_queries: bool = False,  # admin/upload/membership events only
     decision_path: str | None = None,
     actor_user_id: uuid.UUID | None = None,
     channel: str | None = None,
@@ -126,6 +128,8 @@ async def audit_log(
     conds = []
     if event_type:
         conds.append(AuditLog.event_type == event_type)
+    if exclude_queries:
+        conds.append(AuditLog.event_type != "query")
     if decision_path:
         conds.append(AuditLog.decision_path == decision_path)
     if actor_user_id:
@@ -168,6 +172,7 @@ async def audit_query(query_id: uuid.UUID, ctx: Auditor) -> QueryDetailOut:
                 ms=_ms(t),
                 summary=t.summary_user,
                 detail=_redact(t.detail_auditor),
+                started_at=t.started_at,
             )
             for t in steps
         ],  # fmt: skip

@@ -14,7 +14,6 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 COPY src/ ./src/
 COPY migrations/ ./migrations/
 COPY alembic.ini ./
-COPY test-results/ ./test-results/
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev
 

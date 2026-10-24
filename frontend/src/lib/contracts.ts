@@ -83,6 +83,7 @@ export interface SourceOut {
 }
 
 export interface ConversationOut { id: string; title: string | null; channel: string; created_at: string }
+export interface HistoryCitation { id: string; type: string; title: string; container: string; date: string | null }
 export interface MessageOut {
   role: "user" | "assistant" | string;
   content: string;
@@ -90,6 +91,8 @@ export interface MessageOut {
   created_at: string;
   query_id: string | null;
   stale: boolean;
+  sources: HistoryCitation[]; // re-checked against current permissions on every load
+  decision_path: string | null;
 }
 
 export interface AuditRowOut {
@@ -116,7 +119,7 @@ export interface AuditRowOut {
   details: Record<string, unknown> | null;
   row_hash: string;
 }
-export interface TraceStepOut { step: number; label: string; name: string; ms: number | null; summary: string | null; detail?: Record<string, unknown> | null }
+export interface TraceStepOut { step: number; label: string; name: string; ms: number | null; summary: string | null; detail?: Record<string, unknown> | null; started_at?: string | null }
 export interface QueryDetailOut { audit: AuditRowOut; trace: TraceStepOut[] }
 export interface VerifyOut { ok: boolean; rows: number; first_bad_seq: number | null; verified_at: string }
 export interface SummaryOut {
@@ -170,24 +173,38 @@ export interface ActionDraftOut {
 export interface TokenOut { id: string; label: string; created_at: string; last_used_at: string | null; revoked: boolean }
 export interface TokenCreated extends TokenOut { token: string; mcp_json: string }
 
-export interface CaseTestOut { test: string; outcome: "passed" | "failed" | "skipped" | "not_run" | string; at: string | null }
-export interface TestCaseOut {
+/** GET /api/documents/folders */
+export interface FolderOut {
   id: string;
-  persona: string;
-  scenario_id: string;
-  scenario_en: string;
-  expected_id: string;
-  expected_en: string;
-  principle: string;
-  status: "pass" | "fail" | "pending";
-  tests: CaseTestOut[];
-  last_run_at: string | null;
+  name: string;
+  source: "upload_folder" | "whatsapp_group" | string;
+  tier: string;
+  mapped: boolean;
+  role_names: string[]; // who can read it; empty = nobody yet
+  document_count: number;
+  visible_to_me: boolean;
+  can_upload: boolean;
 }
-export interface TestsSummaryOut {
-  total: number;
-  passed: number;
-  failed: number;
-  pending: number;
-  results_updated_at: string | null;
-  cases: TestCaseOut[];
+
+/** GET /api/documents, /api/documents/{id} */
+export interface DocumentOut {
+  id: string;
+  title: string | null;
+  filename: string;
+  folder_id: string;
+  folder_name: string;
+  type: string;
+  authority: string;
+  created_at: string;
+  updated_at: string;
+  revisions: number;
+  uploaded_by: string | null;
+  chunk_count: number;
+  injection_flag: boolean;
+  has_pii: boolean;
+  can_read: boolean;
+  can_manage: boolean;
+  can_download: boolean;
 }
+
+export interface TenantSettingsOut { name: string; slug: string; default_contact: string | null; profile: string | null }

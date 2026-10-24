@@ -6,6 +6,7 @@ import { useL, useT } from "@/lib/i18n";
 import { useSession } from "@/store/session";
 import { apiFetch, errorText } from "@/lib/api";
 import type { InviteOut, RoleOut } from "@/lib/contracts";
+import { copyText } from "@/lib/clipboard";
 import { toast } from "@/components/ui/Toast";
 import { Copy, RefreshCw, KeyRound, UserPlus } from "lucide-react";
 
@@ -47,7 +48,7 @@ export default function Invites() {
   useEffect(() => { loadData(); }, [loadData]);
 
   const copy = async (text: string) => {
-    try { await navigator.clipboard.writeText(text); toast(l("Disalin", "Copied")); } catch { /* clipboard blocked */ }
+    toast((await copyText(text)) ? l("Disalin", "Copied") : l("Gagal menyalin. Salin manual ya.", "Could not copy. Please copy it manually."));
   };
 
   async function rotateCode() {

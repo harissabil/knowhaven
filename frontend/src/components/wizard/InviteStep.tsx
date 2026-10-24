@@ -1,4 +1,5 @@
 "use client";
+import { copyText } from "@/lib/clipboard";
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Check, Copy, Mail, Send, X } from "lucide-react";
@@ -33,8 +34,7 @@ export function InviteStep({ w, patch }: { w: Wizard; patch: (p: Partial<Wizard>
     toast(l("Undangan terkirim", "Invitations sent"));
   }
   const copy = async (text: string) => {
-    try { await navigator.clipboard.writeText(text); } catch { /* clipboard may be blocked */ }
-    toast(l("Link disalin", "Link copied"));
+    toast((await copyText(text)) ? l("Link disalin", "Link copied") : l("Gagal menyalin. Salin manual ya.", "Could not copy. Please copy it manually."));
   };
   const pending = w.invitees.filter((x) => !x.sent).length;
 

@@ -2,9 +2,9 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { MessageSquare, CheckSquare, Users, Shield, Plug, Upload, ScrollText, FlaskConical, KeyRound, LogOut, Settings } from "lucide-react";
+import { MessageSquare, CheckSquare, Users, Shield, Plug, Upload, ScrollText, FlaskConical, KeyRound, LogOut, Settings, FolderOpen, UserPlus, UserCog, User, ChevronDown, BookOpen, EyeOff } from "lucide-react";
 import { useSession, usePersona, useTenants } from "@/store/session";
-import { can, NAV } from "@/lib/permissions";
+import { can, NAV, NAV_SECTIONS } from "@/lib/permissions";
 import { motion } from "framer-motion";
 import { useL, useT, type Key } from "@/lib/i18n";
 import { Mascot } from "@/components/mascot/Mascot";
@@ -14,7 +14,8 @@ const ICON: Record<string, React.ReactNode> = {
   chat: <MessageSquare size={18} />, approvals: <CheckSquare size={18} />, members: <Users size={18} />,
   containers: <Shield size={18} />, integrations: <Plug size={18} />, upload: <Upload size={18} />,
   audit: <ScrollText size={18} />, tests: <FlaskConical size={18} />, workbuddy: <KeyRound size={18} />,
-  settings: <Settings size={18} />,
+  settings: <Settings size={18} />, documents: <FolderOpen size={18} />,
+  invites: <UserPlus size={18} />, managers: <UserCog size={18} />, topics: <BookOpen size={18} />, pii: <EyeOff size={18} />,
 };
 
 export function Shell({ children, title, fullBleed }: { children: React.ReactNode; title?: string; fullBleed?: boolean }) {
@@ -29,6 +30,7 @@ export function Shell({ children, title, fullBleed }: { children: React.ReactNod
   const syncMe = s.syncMe;
   const [checked, setChecked] = useState(false);
   const [switchErr, setSwitchErr] = useState("");
+  const [menu, setMenu] = useState(false);
   // The persisted user is only a hint: confirm the cookie session (and get a CSRF token) on load.
   useEffect(() => { syncMe().finally(() => setChecked(true)); }, [syncMe]);
 
@@ -45,6 +47,7 @@ export function Shell({ children, title, fullBleed }: { children: React.ReactNod
   const myTenants = allTenants;
   const tenantName = s.currentUser?.active_tenant?.tenant_name ?? "";
   const sel = "input !w-auto";
+  const SECTION_LABEL = { daily: l("Pekerjaan harian", "Daily work"), manage: l("Kelola perusahaan", "Manage company"), monitor: l("Pemantauan", "Monitoring"), account: l("Akun saya", "My account") };
   const wizard = path.startsWith("/admin/setup");
   const guard = NAV.find((n) => path.startsWith(n.href));
   const allowed = !guard?.cap || can(roles, guard.cap, canApprove);
@@ -55,13 +58,22 @@ export function Shell({ children, title, fullBleed }: { children: React.ReactNod
         <Link href="/" className="flex items-center gap-2 mb-5 font-semibold text-lg tracking-tight">
           <Mascot size={44} /> Knowhaven
         </Link>
-        {items.map((n) => {
-          const active = n.href === "/settings" ? path === "/settings" : path.startsWith(n.href);
+        {NAV_SECTIONS.map((sec) => {
+          const group = items.filter((n) => n.section === sec);
+          if (!group.length) return null;
           return (
-            <Link key={n.id} href={n.href}
-              className={`flex items-center gap-2.5 px-3.5 py-2 rounded-full text-[0.95rem] transition-colors ${active ? "bg-tint text-brand font-medium" : "text-muted hover:bg-surface2 hover:text-fg"}`}>
-              {ICON[n.id]} {t(n.id as Key)}
-            </Link>
+            <div key={sec} className="mt-3 first:mt-0 flex flex-col gap-1" role="group" aria-label={SECTION_LABEL[sec]}>
+              <div className="px-3.5 pb-0.5 text-[0.7rem] font-semibold uppercase tracking-wider text-muted/70">{SECTION_LABEL[sec]}</div>
+              {group.map((n) => {
+                const active = n.href === "/settings" ? path === "/settings" : path.startsWith(n.href);
+                return (
+                  <Link key={n.id} href={n.href} aria-current={active ? "page" : undefined}
+                    className={`flex items-center gap-2.5 px-3.5 py-2 rounded-full text-[0.95rem] transition-colors ${active ? "bg-tint text-brand font-medium" : "text-muted hover:bg-surface2 hover:text-fg"}`}>
+                    {ICON[n.id]} {t(n.id as Key)}
+                  </Link>
+                );
+              })}
+            </div>
           );
         })}
       </aside>}
@@ -76,9 +88,28 @@ export function Shell({ children, title, fullBleed }: { children: React.ReactNod
           <div className="flex-1" />
           {!wizard && <Palette />}
           <button className="btn" onClick={() => s.set({ lang: s.lang === "id" ? "en" : "id" })}>{s.lang === "id" ? "EN" : "ID"}</button>
-          <span className="text-sm text-muted">{persona.name} · {roles.join(", ")}</span>
-          <button className="btn" onClick={async () => { await s.logout(); router.push("/login"); }}><LogOut size={16} /> {t("logout")}</button>
-        </header>
+          <div className="relative group" onMouseEnter={() => setMenu(true)} onMouseLeave={() => setMenu(false)}
+            onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setMenu(false); }}>
+            <button className="btn" aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu((v) => !v)}>
+              <User size={16} /> {persona.name} <ChevronDown size={14} className={`transition-transform ${menu ? "rotate-180" : ""}`} />
+            </button>
+            {menu && (
+              <div className="absolute right-0 top-full pt-2 z-20 min-w-56">
+                <div role="menu" className="rounded-xl border border-line bg-surface shadow-lg p-2 flex flex-col gap-1">
+                  <div className="px-3 py-2 border-b border-line mb-1">
+                    <div className="text-xs text-muted">{l("Peran Anda", "Your role")}</div>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {roles.map((r) => <span key={r} className="rounded-full bg-tint text-brand px-2.5 py-0.5 text-xs font-medium">{r}</span>)}
+                    </div>
+                  </div>
+                  <button role="menuitem" className="flex items-center gap-2.5 px-3 py-2 rounded-full text-[0.95rem] text-muted hover:bg-surface2 hover:text-fg transition-colors text-left"
+                    onClick={async () => { await s.logout(); router.push("/login"); }}>
+                    <LogOut size={16} /> {t("logout")}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>        </header>
         <motion.main
           className={fullBleed ? "flex-1 flex flex-col min-h-0 w-full overflow-hidden" : "p-6 md:p-8 flex-1 w-full max-w-6xl mx-auto"}
           initial={{ opacity: 0, y: 12 }}
