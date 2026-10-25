@@ -375,3 +375,40 @@ async def test_inline_document_tag_is_kept_in_history_and_hidden_from_the_model(
     )  # chip survives in history
     trace = (await dimas.get(f"/api/queries/{f['query_id']}/trace")).json()
     assert any("sumber" in (t["summary"] or "").lower() for t in trace if t["name"] == "retrieve")
+
+
+async def test_pipeline_pii_remains_masked_unless_query_needs_it(org):
+    """B3 / 11.4: even for HR (with PII permissions), raw PII is only unmasked when needs_pii=True."""
+    tenant_id, _, people = org
+    await Ingestor(FakeEmbedder(), DictionaryExtractor()).ingest(
+        tenant_id,
+        [_chat("C-HR", "pengumuman-hr", 2, "Kontak darurat HR: NIK 3201230501900001, uang bensin Rp750.000.", 1, "U-SARI")],
+    )  # fmt: skip
+    sari_ctx = await ctx_of(tenant_id, people["Sari"])
+
+    # 1. General query (needs_pii=False): HR has PII permission, but query does not need PII -> not released
+    evs_no_pii = await collect(pipeline(StubSteps()), sari_ctx, "Uang bensin per bulan berapa?")
+    ret_step = next(
+        e.data
+        for e in evs_no_pii
+        if e.name == "trace" and e.data.get("name") == "retrieve" and e.data.get("status") == "done"
+    )
+    qid_no = uuid.UUID(final(evs_no_pii)["query_id"])
+    async with tenant_session(tenant_id) as s:
+        row_no = await s.scalar(select(AuditLog).where(AuditLog.query_id == qid_no))
+    assert row_no.details["pii_released"] is False and ret_step["status"] == "done"
+
+    # 2. Query that needs PII (needs_pii=True): HR has PII permission AND query requires PII -> released
+    steps_pii = StubSteps()
+
+    async def understand_with_pii(question, history):
+        u, call = await StubSteps.understand(steps_pii, question, history)
+        u.needs_pii = True
+        return u, call
+
+    steps_pii.understand = understand_with_pii  # type: ignore[method-assign]
+    evs_pii = await collect(pipeline(steps_pii), sari_ctx, "Uang bensin per bulan berapa?")
+    qid_yes = uuid.UUID(final(evs_pii)["query_id"])
+    async with tenant_session(tenant_id) as s:
+        row_yes = await s.scalar(select(AuditLog).where(AuditLog.query_id == qid_yes))
+    assert row_yes.details["pii_released"] is True

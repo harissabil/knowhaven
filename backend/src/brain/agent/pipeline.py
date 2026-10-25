@@ -323,7 +323,7 @@ class _Run:
         st, ev = self._start(4, "LLM+CODE", "retrieve")
         yield ev
         async with tenant_session(ctx.tenant_id) as s:
-            r.policy = await pii_policy(s, ctx, True)
+            r.policy = await pii_policy(s, ctx, und.needs_pii)
         await self._baseline_retrieval()
         planner_model = None
         try:
