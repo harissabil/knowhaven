@@ -20,7 +20,7 @@ In Indonesian enterprises, operational truth is fragmented across **chat** (Slac
 
 ## 2. System Architecture & Trust Boundaries
 
-![Knowhaven System Architecture](./architecture.svg)
+<img width="1141" height="677" alt="knowhaven archtitecture-fix(1)" src="https://github.com/user-attachments/assets/a4b2f29c-d58a-4a98-bf62-1a279deb79e6" />
 
 ### Explicit Trust Boundaries
 
