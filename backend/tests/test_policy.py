@@ -93,6 +93,173 @@ def test_same_value_from_several_sources_is_not_a_conflict():
     assert r.chosen is HR and not r.is_conflict and conflict.reason_sentence(r, "id") is None
 
 
+def test_same_day_tie_shows_both_values_and_marks_no_doc_stale():
+    """Rule 5 in full: don't pick, show both, and don't call the doc outdated while undecided."""
+    doc = claim(
+        "Rp50.000",
+        "official_doc",
+        "2026-10-01T02:00",
+        "DOC-kebijakan-lembur#2",
+        "doc",
+        "Kebijakan Lembur",
+        topic="lembur",
+    )
+    ann = claim(
+        "Rp40.000",
+        "official_announcement",
+        "2026-10-01T03:00",
+        "CHAT-pengumuman-hr-0006",
+        topic="lembur",
+    )
+    (r,) = conflict.resolve([doc, ann])
+    assert r.chosen is None and r.tie and r.is_conflict
+    assert [c.citation_id for c in r.competing] == [doc.citation_id, ann.citation_id]
+    assert r.unverified == []
+    assert r.stale_doc_ids == []  # nothing may be retired while the decision is open
+    assert r.as_dict()["chosen"] is None
+
+
+def test_same_day_tie_separates_rumours_from_the_competing_values():
+    """Only authoritative claims compete; a same-day discussion claim stays unverified."""
+    a = claim(
+        "Rp50.000",
+        "official_announcement",
+        "2026-10-01T02:00",
+        "CHAT-pengumuman-hr-0006",
+        topic="lembur",
+    )
+    b = claim(
+        "Rp40.000",
+        "official_doc",
+        "2026-10-01T05:00",
+        "DOC-kebijakan-lembur#2",
+        "doc",
+        topic="lembur",
+    )
+    rumour = claim(
+        "Rp90.000", "team_discussion", "2026-10-01T09:20", "CHAT-general-0005", container="general",
+        topic="lembur",
+    )  # fmt: skip
+    (r,) = conflict.resolve([a, b, rumour])
+    assert r.tie and r.chosen is None
+    assert {c.value for c in r.competing} == {"Rp50.000", "Rp40.000"}
+    assert [c.citation_id for c in r.unverified] == ["CHAT-general-0005"]
+
+
+def test_same_day_tie_lists_every_authoritative_value():
+    """Three official sources, same day, three values: all three are reported, not just the first two."""
+    claims = [
+        claim("Rp50.000", "official_announcement", "2026-10-01T02:00", "CHAT-pengumuman-hr-0006", topic="lembur"),
+        claim("Rp45.000", "official_announcement", "2026-10-01T05:00", "CHAT-pengumuman-hr-0007", topic="lembur"),
+        claim("Rp40.000", "official_doc", "2026-10-01T06:00", "DOC-kebijakan-lembur#2", "doc", topic="lembur"),
+    ]  # fmt: skip
+    (r,) = conflict.resolve(claims)
+    assert r.tie and r.chosen is None
+    assert {c.value for c in r.competing} == {"Rp50.000", "Rp45.000", "Rp40.000"}
+
+
+def test_same_day_is_a_wib_day_not_a_utc_day():
+    """`day` is the WIB date, so 00:30 and 08:00 WIB on 2 Oct tie even though the UTC dates differ."""
+    early = claim(
+        "Rp50.000",
+        "official_announcement",
+        "2026-10-01T17:30",
+        "CHAT-pengumuman-hr-0006",
+        topic="lembur",
+    )  # 2026-10-02 00:30 WIB
+    late = claim(
+        "Rp40.000",
+        "official_announcement",
+        "2026-10-02T01:00",
+        "CHAT-pengumuman-hr-0007",
+        topic="lembur",
+    )  # 2026-10-02 08:00 WIB
+    assert early.day == late.day
+    (r,) = conflict.resolve([early, late])
+    assert r.tie and r.chosen is None
+    assert {c.day.isoformat() for c in r.competing} == {"2026-10-02"}
+
+    # 17:00 WIB and 01:00 WIB the next day share a UTC date but are different WIB days: no tie.
+    before = claim(
+        "Rp50.000",
+        "official_announcement",
+        "2026-10-01T10:00",
+        "CHAT-pengumuman-hr-0006",
+        topic="lembur",
+    )  # 2026-10-01 17:00 WIB
+    after = claim(
+        "Rp40.000",
+        "official_announcement",
+        "2026-10-01T18:00",
+        "CHAT-pengumuman-hr-0007",
+        topic="lembur",
+    )  # 2026-10-02 01:00 WIB
+    (r2,) = conflict.resolve([before, after])
+    assert not r2.tie and r2.chosen is after and r2.reason == "newer"
+
+
+def test_same_day_tie_sentence_names_both_values_sources_and_date():
+    """The user-facing sentence must carry the evidence for the refusal to pick, in both languages."""
+    doc = claim(
+        "Rp50.000",
+        "official_doc",
+        "2026-10-01T02:00",
+        "DOC-kebijakan-lembur#2",
+        "doc",
+        "Kebijakan Lembur",
+        topic="lembur",
+    )
+    ann = claim(
+        "Rp40.000",
+        "official_announcement",
+        "2026-10-01T03:00",
+        "CHAT-pengumuman-hr-0006",
+        topic="lembur",
+    )
+    (r,) = conflict.resolve([doc, ann])
+
+    en = conflict.reason_sentence(r, "en")
+    assert "Rp50.000" in en and "Rp40.000" in en
+    assert "Kebijakan Lembur" in en and "pengumuman-hr" in en  # title, else container
+    assert "2026-10-01" in en and "can't pick" in en
+
+    id_ = conflict.reason_sentence(r, "id")
+    assert "Rp50.000" in id_ and "Rp40.000" in id_
+    assert "tidak bisa memilih" in id_
+
+
+def test_same_day_tie_leaves_older_authoritative_claims_out_of_the_decision():
+    """An older official value is superseded by both same-day sources: it is neither chosen nor retired."""
+    older = claim(
+        "Rp60.000",
+        "official_doc",
+        "2026-09-30T02:00",
+        "DOC-kebijakan-lembur-lama#1",
+        "doc",
+        "Kebijakan Lembur Lama",
+        topic="lembur",
+    )
+    a = claim(
+        "Rp50.000",
+        "official_announcement",
+        "2026-10-01T02:00",
+        "CHAT-pengumuman-hr-0006",
+        topic="lembur",
+    )
+    b = claim(
+        "Rp40.000",
+        "official_doc",
+        "2026-10-01T05:00",
+        "DOC-kebijakan-lembur#2",
+        "doc",
+        topic="lembur",
+    )
+    (r,) = conflict.resolve([older, a, b])
+    assert r.tie and r.chosen is None
+    assert {c.value for c in r.competing} == {"Rp50.000", "Rp40.000"}
+    assert r.stale_doc_ids == []  # neither doc is retired: the newer pair is still undecided
+
+
 ALLOWED = {
     "CHAT-pengumuman-hr-0002": "uang bensin naik dari Rp500.000 menjadi Rp750.000 per bulan",
     "DOC-sop-reimbursement#3": "Karyawan menerima uang bensin sebesar Rp500.000 per bulan.",
@@ -317,6 +484,75 @@ def test_change_announcement_listing_old_and_new_value_is_not_a_tie():
         and r2.chosen.item_id == "CHAT-pengumuman-hr-0002"
         and r2.reason == "announcement_newer_than_doc"
     )
+
+
+def test_change_announcement_alone_never_ties_with_itself():
+    """One message stating "dari Rp500.000 menjadi Rp750.000" is one source: no tie, no "can't pick"."""
+    old = claim("Rp500.000", "official_announcement", "2026-09-02T02:30", "CHAT-pengumuman-hr-0002")
+    new = claim(
+        "Rp750.000 per bulan",
+        "official_announcement",
+        "2026-09-02T02:30",
+        "CHAT-pengumuman-hr-0002",
+    )
+    assert old.item_id == new.item_id and old.norm != new.norm  # two values, one source
+
+    (r,) = conflict.resolve([old, new])
+    assert r.reason == "single" and not r.tie and not r.is_conflict
+    assert r.chosen is not None and r.chosen.value in {old.value, new.value}
+    assert r.competing == [] and r.unverified == []
+    assert conflict.reason_sentence(r, "id") is None  # nothing to explain to the user
+
+
+def test_change_announcement_same_day_as_doc_ties_on_the_new_value():
+    """An announcement saying "naik dari 500rb menjadi 750rb" next to a doc that says 500rb, same day:
+    the announcement enters the comparison once, with the value it announces as current."""
+    old = claim("500rb", "official_announcement", "2026-10-01T02:00", "CHAT-pengumuman-hr-0006")
+    new = claim(
+        "Rp750.000 per bulan",
+        "official_announcement",
+        "2026-10-01T02:00",
+        "CHAT-pengumuman-hr-0006",
+    )
+    doc = claim(
+        "Rp500.000 per bulan",
+        "official_doc",
+        "2026-10-01T05:00",
+        "DOC-sop#3",
+        "doc",
+        "SOP Reimbursement Biaya Operasional",
+    )
+    (r,) = conflict.resolve([old, new, doc])
+    assert r.tie and r.chosen is None
+    # 500rb and Rp500.000 normalize to the same value, so the doc competes once, against the new value.
+    assert {c.norm for c in r.competing} == {"#500000", "#750000"}
+    assert {c.item_id for c in r.competing} == {"CHAT-pengumuman-hr-0006", "DOC-sop"}
+    assert r.stale_doc_ids == []
+
+
+def test_change_announcement_old_and_new_value_retires_the_older_doc():
+    """The same announcement against an older doc: the value it announces as current wins, the doc is stale."""
+    old = claim("500rb", "official_announcement", "2026-10-01T02:00", "CHAT-pengumuman-hr-0006")
+    new = claim(
+        "Rp750.000 per bulan",
+        "official_announcement",
+        "2026-10-01T02:00",
+        "CHAT-pengumuman-hr-0006",
+    )
+    doc = claim(
+        "Rp500.000 per bulan",
+        "official_doc",
+        "2026-02-28T17:00",
+        "DOC-sop#3",
+        "doc",
+        "SOP Reimbursement Biaya Operasional",
+    )
+    (r,) = conflict.resolve([old, new, doc])
+    assert not r.tie and r.chosen.norm == "#750000"
+    assert r.reason == "announcement_newer_than_doc"
+    assert r.stale_doc_ids == ["DOC-sop"]
+    assert [c.norm for c in r.competing] == ["#500000"]
+    assert "usang" in conflict.reason_sentence(r, "id")
 
 
 def test_topic_alias_matches_its_words_in_any_order():
