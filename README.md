@@ -187,7 +187,14 @@ Configuration is described in `.env.example`.
 
 ## Stack
 
-FastAPI and SQLAlchemy on PostgreSQL with pgvector (Neon), Next.js 16 for the web app, Gemini
-Flash models on Vertex AI for language and embeddings, an MCP server for WorkBuddy, and a worker
-that syncs Confluence and Jira every two minutes. Slack messages arrive through the Events API.
-Everything runs in Docker on Tencent Cloud Lighthouse.
+| Layer | Technology |
+|---|---|
+| Web app | Next.js 16, React 19 |
+| API and pipeline | FastAPI, SQLAlchemy (async), Agno |
+| Database and search | PostgreSQL on Neon with pgvector, full-text search and pg_trgm; forced row-level security |
+| File storage | Neon object storage (S3-compatible) for uploaded originals |
+| Models | Gemini Flash models on Vertex AI (3.5 Flash-Lite, 3.6 Flash, 3.7 Flash) and Gemini embeddings |
+| WorkBuddy | MCP server (streamable HTTP) with personal tokens |
+| Integrations | Slack Events API and OAuth; Confluence and Jira synced by a worker every two minutes; uploads (PDF, DOCX, Markdown) and WhatsApp exports |
+| Hosting | Docker Compose on Tencent Cloud Lighthouse, Caddy for HTTPS |
+| Evaluation | `brain-eval` with a 58-question golden set |
