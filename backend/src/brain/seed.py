@@ -320,7 +320,7 @@ async def append_tenant(slug: str, ingestor: Ingestor, chat_since: datetime | No
             await bump_permission_version(s, tenant_id)
         channels = {
             c.name: c.external_id
-            for c in await s.scalars(select(Container).where(Container.source == "slack"))
+            for c in await s.scalars(select(Container).where(Container.source == "slack_channel"))
         }
     items = []
     if chat_since is not None:
