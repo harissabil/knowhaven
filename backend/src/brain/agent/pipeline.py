@@ -28,6 +28,7 @@ from agno.agent import Agent
 from sqlalchemy import func, select
 
 from brain.agent import prompts
+from brain.agent.mentions import split_mentions
 from brain.agent.schemas import Evidence, Understanding
 from brain.audit import log as audit
 from brain.db.models import Conversation, IngestionEvent, Message, TraceEvent
@@ -204,9 +205,13 @@ class _Run:
         channel: str,
         document_ids: list[str] | None = None,
     ):
-        self.p, self.ctx, self.q, self.channel = p, ctx, question, channel
+        # Inline tags ("@[SOP Cuti](DOC-x)") stay in the stored message; the model sees "@SOP Cuti".
+        plain_q, tagged_ids = split_mentions(question)
+        self.p, self.ctx, self.q, self.channel = p, ctx, plain_q, channel
+        self.raw_q = question
         self.conversation_id = conversation_id
-        self.document_ids = [d.strip() for d in (document_ids or []) if d and d.strip()][:10]
+        extra = [d.strip() for d in (document_ids or []) if d and d.strip()]
+        self.document_ids = list(dict.fromkeys(tagged_ids + extra))[:10]
         self.query_id = uuid.uuid4()
         self.t0 = time.monotonic()
         self.steps: list[_Step] = []
@@ -501,7 +506,7 @@ class _Run:
         pairs, pending = [], None
         for m in current:
             if m.role == "user":
-                pending = m.content
+                pending = split_mentions(m.content)[0]  # tags as "@Title" for the model
             elif pending is not None:
                 pairs.append((pending, m.content))
                 pending = None
@@ -602,7 +607,7 @@ class _Run:
         async with tenant_session(ctx.tenant_id) as s:
             data_as_of = await s.scalar(select(func.max(IngestionEvent.processed_at)))
             s.add(Message(tenant_id=ctx.tenant_id, conversation_id=self.conversation_id, role="user",
-                    created_at=asked_at, content=self.q,
+                    created_at=asked_at, content=self.raw_q,
                           permission_version=ctx.permission_version, query_id=self.query_id))  # fmt: skip
             await s.flush()
             s.add(Message(tenant_id=ctx.tenant_id, conversation_id=self.conversation_id, role="assistant",
