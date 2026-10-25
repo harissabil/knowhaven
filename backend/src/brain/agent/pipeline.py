@@ -46,6 +46,9 @@ from brain.retrieval.search import Hit, SearchResult, pii_policy
 from brain.retrieval.tools import COMPANY_PROFILE_ID, Retriever, format_hits
 
 HISTORY_TURNS = 3
+STALE_ANSWER = (
+    "(jawaban sebelumnya dihapus karena izin akses berubah; jawab ulang dengan izin sekarang)"
+)
 MAX_EVIDENCE_HITS = 16
 PLANNER_BUDGET_S = 8.0
 
@@ -508,16 +511,21 @@ class _Run:
                 )
             ).all()
         msgs = list(reversed(msgs))
-        changed = any(m.permission_version != ctx.permission_version for m in msgs)
-        current = [
-            m for m in msgs if m.permission_version == ctx.permission_version
-        ]  # trimmed (10.5)
+        # Noted once: on the first turn after the change, not on every later turn that still has
+        # older messages in its window.
+        changed = bool(msgs) and msgs[-1].permission_version != ctx.permission_version
         pairs, pending = [], None
-        for m in current:
+        for m in msgs:
             if m.role == "user":
                 pending = split_mentions(m.content)[0]  # tags as "@Title" for the model
             elif pending is not None:
-                pairs.append((pending, m.content))
+                # Answers computed under other permissions are dropped (8.5): they may hold content
+                # the user can no longer see. The user's own questions stay, so "and the one I
+                # asked before?" still resolves after an access request is approved.
+                answer = (
+                    m.content if m.permission_version == ctx.permission_version else STALE_ANSWER
+                )
+                pairs.append((pending, answer))
                 pending = None
         self.history = pairs[-HISTORY_TURNS:]
         return changed
@@ -562,10 +570,27 @@ class _Run:
         uniq = {h.citation_id: h for h in self.retriever.seen.values()}
         profile = uniq.pop(COMPANY_PROFILE_ID, None)
         tagged = {d.split("#")[0] for d in self.document_ids}
-        top = sorted(
+        ranked = sorted(
             uniq.values(),
             key=lambda h: (0 if h.item_id in tagged else 1, -h.score, h.citation_id),
-        )[:MAX_EVIDENCE_HITS]
+        )
+        # Fair share per source type: every type is searched, and one type's weak matches (e.g.
+        # unrelated announcements) must not push another type's best match out of the window.
+        # Types the question is about get two slots per round, the others one.
+        preferred = set(self.und.source_types or ()) if self.und else set()
+        queues = {t: [h for h in ranked if h.type == t] for t in ("doc", "chat", "task")}
+        queues["other"] = [h for h in ranked if h.type not in ("doc", "chat", "task")]
+        top = [h for h in ranked if h.item_id in tagged][:MAX_EVIDENCE_HITS]
+        picked = {h.citation_id for h in top}
+        while len(top) < MAX_EVIDENCE_HITS and any(queues.values()):
+            for t, q in queues.items():
+                for _ in range(2 if t in preferred else 1):
+                    while q and q[0].citation_id in picked:
+                        q.pop(0)
+                    if q and len(top) < MAX_EVIDENCE_HITS:
+                        h = q.pop(0)
+                        top.append(h)
+                        picked.add(h.citation_id)
         return top + [profile] if profile else top
 
     def _allowed_texts(self) -> dict[str, str]:

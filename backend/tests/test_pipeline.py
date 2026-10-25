@@ -9,7 +9,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from sqlalchemy import func, select
 
-from brain.agent.pipeline import Event, Pipeline, Steps
+from brain.agent.pipeline import STALE_ANSWER, Event, Pipeline, Steps
 from brain.agent.schemas import Evidence, ExtractedClaim, Understanding
 from brain.api.chat import get_pipeline
 from brain.audit import log as audit
@@ -277,13 +277,20 @@ async def test_history_is_trimmed_when_permissions_change(org):
     second = final(await collect(pipeline(steps), ctx, "Uang bensin per bulan berapa?", conv))
     assert steps.histories[1] and "access_changed" not in second["notes"]
 
-    # Admin changes a permission: the version bumps, old turns are no longer context (10.5).
+    # Admin changes a permission: the version bumps. Old answers are no longer context (8.5, 10.5),
+    # but the user's own questions are, so "the one I asked before" still resolves.
     roles = {r["key"]: r["id"] for r in (await admin.get("/api/admin/roles")).json()}
     await admin.put(f"/api/admin/pii/{roles['staff']}", json={"pii_types": ["phone"]})
     ctx2 = await ctx_of(tenant_id, dimas)
     third = final(await collect(pipeline(steps), ctx2, "Uang bensin per bulan berapa?", conv))
-    assert steps.histories[2] == [] and "access_changed" in third["notes"]
-    assert "Akses Anda berubah" in third["answer"]
+    assert [q for q, _ in steps.histories[2]] == ["Uang bensin per bulan berapa?"] * 2
+    assert all(a == STALE_ANSWER for _, a in steps.histories[2])
+    assert "access_changed" in third["notes"] and "Akses Anda berubah" in third["answer"]
+
+    # The note is shown once, not on every later turn.
+    fourth = final(await collect(pipeline(steps), ctx2, "Uang bensin per bulan berapa?", conv))
+    assert "access_changed" not in fourth["notes"]
+    assert steps.histories[3][-1][1] != STALE_ANSWER
 
 
 async def test_injection_note_when_a_flagged_source_is_cited(org, monkeypatch):
