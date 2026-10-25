@@ -1,135 +1,212 @@
-# Knowhaven (Havi) — The Workplace Brain
+# Knowhaven
 
-> **Short Blurb (<10 words):** Company knowledge answers that respect every access boundary.
+Company knowledge answers that respect every access boundary.
 
-**Challenge Track:** Challenge A — The Workplace Brain  
-**Event:** AI CAN DO IT · Tencent Cloud Hackathon Indonesia 2026  
-**Companion Docs:** [1-Page Accountability Sheet](./ACCOUNTABILITY_SHEET.md) · [Accountability Test Results (T01–T33)](./TEST_RESULTS.md)
+Challenge A, The Workplace Brain · AI CAN DO IT, Tencent Cloud Hackathon Indonesia 2026
 
----
+Companion documents: [Accountability sheet](./ACCOUNTABILITY_SHEET.md) · [Test results](./TEST_RESULTS.md) · [Evaluation method](./backend/eval/README.md)
 
-## 1. Overview & Real-World Insight
+## Contents
 
-In Indonesian enterprises, operational truth is fragmented across **chat** (Slack & WhatsApp groups), **documents** (Confluence SOPs, PDFs, meeting notes), and **tasks** (Jira). Standard RAG chatbots fail in real workplaces for two reasons:
-1. **They leak what exists:** Even when a bot refuses to show a secret document, saying *"You don't have permission to view Proyek Kenari"* confirms that a confidential acquisition named *Kenari* exists.
-2. **They guess when sources disagree:** When an older HR SOP says fuel allowance is `Rp500.000` and a newer HR announcement says `Rp750.000`, naive LLMs pick arbitrarily or hallucinate.
+- [Overview](#overview)
+- [The problem](#the-problem)
+- [How it works](#how-it-works): [architecture](#architecture), [design trade-offs](#key-design-trade-offs), [prompt design](#prompt-design)
+- [Results](#results)
+- [Business value](#business-value)
+- [WorkBuddy](#workbuddy)
+- [Try it](#try-it)
+- [Run locally](#run-locally)
+- [Stack](#stack)
 
-**Knowhaven (Havi)** solves both with a simple architectural rule: **"Two Entry Doors, One Permission-Enforcing Backend — LLM Extracts, Code Decides, LLM Explains."** Whether an employee asks via our **Next.js Web App** or **Tencent WorkBuddy Desktop (MCP)**, every query runs through the same 8-step accountable pipeline backed by PostgreSQL `FORCE ROW LEVEL SECURITY`.
+## Overview
 
----
+Knowhaven is a knowledge assistant for Indonesian companies. Employees ask in Bahasa Indonesia,
+English or a mix of both, and Havi, the assistant, answers from the company's Slack, WhatsApp
+exports, Confluence pages, uploaded documents and Jira tasks. Every answer cites the message,
+page or task it came from, and only uses what the person asking is allowed to see.
 
-## 2. System Architecture & Trust Boundaries
+Target users are new employees and staff who need policies and project status quickly, HR and
+operations teams who answer the same questions repeatedly, and auditors who need to check what the
+assistant did. It runs as a web app and inside Tencent WorkBuddy through an MCP connector; both use
+the same backend and the same permission checks.
 
-<img width="1141" height="677" alt="knowhaven archtitecture-fix(2)" src="https://github.com/user-attachments/assets/e823fbd5-726b-4884-9dc6-e4a98b9b2eef" />
+The demo company is PT Sinar Rantai Nusantara, a fictional consumer-goods distributor with
+warehouses in Jakarta, Surabaya and Makassar, plus a second company (CV Kopi Lereng Merapi) to show
+that tenants never see each other's data.
 
-### Explicit Trust Boundaries
+## The problem
 
-| Boundary | What Crosses It | How It Is Enforced |
-| :--- | :--- | :--- |
-| **TB-1 · Client Entry** | Browser HTTP & WorkBuddy MCP calls | Identity comes strictly from `HttpOnly` session cookies (+ CSRF) or SHA-256 `wbk_...` MCP tokens. Role claims inside chat (`"Saya HRD..."`) or headers are ignored; roles are re-read from PostgreSQL on every request. |
-| **TB-2 · Pre-Search SQL RBAC** | User query → Retrieval tools | `RequestContext` is injected by backend code—never by LLM tool arguments. A single SQL `vis` CTE filters out unmapped, deleted, or unauthorized items *before* vector, full-text, or trigram scoring runs. |
-| **TB-3 · Database Force RLS** | Backend session → Lakebase Postgres | Runtime connects as `brain_app` (`NOBYPASSRLS`). All 19 tenant tables enforce `FORCE ROW LEVEL SECURITY` on `current_setting('app.tenant_id')::uuid`. `audit_log` grants only `INSERT, SELECT` to `brain_app`. |
-| **TB-4 · HITL Write Gate** | SOP update diffs & Gated access requests | The agent has **zero write credentials**. Stale SOP conflicts create a pending `ActionDraft`; only after a manager approves in `/approvals` does `executors.execute()` update Confluence or grant a time-limited `TempGrant`. |
-| **TB-5 · Cross-Cloud AI** | Filtered chunks → Gemini (Vertex AI) | Personal data (NIK, NPWP, phone, personal email, bank account) is masked into `text_masked` at ingestion. Raw PII is unmasked only when `role ∈ pii_permissions ∧ needs_pii == True`. |
+In most Indonesian companies the latest policy is a chat message, not the official document. The
+fuel allowance in the reimbursement SOP says Rp500.000, but HR announced Rp750.000 in
+`#pengumuman-hr` last month. A new hire who reads the SOP gets it wrong; one who asks a colleague
+waits for an answer. Senior staff become the bottleneck.
 
-### Key Design Trade-Offs
+An assistant that can read everything can also leak everything. Two failure modes matter most:
 
-| Decision | Alternative Rejected | Why We Made This Trade-Off |
-| :--- | :--- | :--- |
-| **High-level MCP tool (`ask_workplace_brain`) for WorkBuddy** | Exposing raw vector/SQL search tools to WorkBuddy | If WorkBuddy's desktop LLM composed answers from raw chunks, our deterministic conflict resolver (R4), zero-leak IDK template (R3/R5), and citation validator (R1) could be bypassed. |
-| **Pre-search SQL `vis` CTE vs. Agno dynamic filters** | Agno `enable_agentic_knowledge_filters` or top-K post-filtering | Letting the LLM choose filter values risks privilege escalation; post-filtering top-K leaks item existence via score shifts. Pre-filtering in SQL guarantees byte-identical responses (`T01 == T02`). |
-| **"LLM Extracts, Code Decides, LLM Explains"** | Asking the LLM to pick the winning source in free-form text | Deterministic Python rules (`conflict.py`) guarantee 100% repeatable authority > recency > tie resolution and automatic HITL SOP draft creation. |
-| **Dual chunk storage (`text_masked` + `text_raw`)** | Masking PII only in the final LLM prompt | Indexing `text_masked` prevents users from probing for a colleague's NIK/phone via search and ensures the LLM never receives raw PII unless authorized. |
-| **Tiered Flash models + 4s hedged streaming** | Single large Pro model for all steps | `gemini-3.5-flash-lite` (Step 2/4), `3.6-flash` (Step 5), and `3.7-flash` hedged by `3.6-flash` (Step 6) keep p95 latency well inside the 90-second live test budget. |
+- **Leaking that something exists.** "You don't have access to Proyek Kenari" already tells a staff
+  member that a confidential acquisition project exists.
+- **Guessing when sources disagree.** A model shown both Rp500.000 and Rp750.000 picks one without
+  saying which source it trusted or why.
 
----
+## How it works
 
-## 3. Compliance with the 5 Accountability Rules & Challenge A
+Every question, from the web app or WorkBuddy, goes through the same eight-step pipeline. The
+model reads and writes text; code makes every decision that affects access or correctness.
 
-| Rule / Req | Requirement Summary | How Knowhaven Implements It |
-| :--- | :--- | :--- |
-| **R1 · `SOURCES`** | Answer in ID, EN, or mixed; cite every source | Detects `id`/`en`/`mixed` + bilingual query expansion (`brp`→`berapa`, `fuel allowance`↔`uang bensin`). Step 7 (`validate.py`) verifies every substantive sentence cites `[CHAT-... \| DOC-... \| TASK-...]` in the user's allowed set and every number $\ge 10$ matches the cited source. |
-| **R2 · `PERMISSIONS`** | Check auth before search; reflect access changes immediately | `load_context()` reads roles and `permission_state.version` fresh on every query. When access changes, stale conversation turns are trimmed and the response includes an `access_changed` notice. |
-| **R3 · `PERMISSIONS`** | Refuse restricted queries without implying existence | Hidden containers (`#proyek-kenari`, `RAHASIA`, Jira `KNR`) are excluded in SQL. When 0 visible claims remain, `idk.py` returns a deterministic template using only the user's typed phrase. *Proyek Kenari* and non-existent *Proyek Merpati* produce byte-identical output and SSE event sequences. |
-| **R4 · `SOURCES`** | Flag conflicts, explain which source won and why | Step 5 extracts claims; `conflict.py` resolves: (1) Authority over topic, (2) Newer authoritative source wins, (3) Newer HR announcement > older SOP marks SOP stale & proposes an `ActionDraft` diff, (4) Rumours marked `unverified`, (5) Same-day equal-authority ties show both values. |
-| **R5 · `LIMITS`** | Say "I don't know" and route to subject-matter owner | Missing topics match public `topic_owners` (`open`/`gated` only, never `hidden`) and route to the owner (e.g., `"beasiswa S2"` → `HR Helpdesk (hr@srn-demo.id)`). |
-| **R6 · `RECORD`** | Log every query, retrieved sources, and response | Step 8 writes all 8 `trace_events` and appends a SHA-256 hash-chained row (`prev_hash` → `row_hash`) to `audit_log` (append-only at the PostgreSQL role level, verifiable via `/audit`). |
-| **Bonus B1** | Stay current as new messages/docs arrive | Live Slack Events API webhook (`message`, `message_changed`, `message_deleted`), 120s Confluence/Jira worker, instant web uploads, zero answer caching, and live `data_as_of` badge. |
-| **Bonus B2** | Ignore prompt injections inside documents | Read-only agent tools + `<source flag="contains_instructions_to_ignore">` XML escaping + `DATA_RULE` system prompts + ingestion scanner (`injection.py`) that appends an explicit ignored-instruction warning when cited. |
-| **Bonus B3** | Mask NIK & phone unless query requires it | Regex + province/DOB validation masks NIK, NPWP, phone, personal email, and bank accounts at ingestion; unmasked only when `role ∈ pii_permissions ∧ und.needs_pii == True`, plus a deterministic Step 7 output guard. |
-| **Bonus B4** | Synthesize chat, document, and task in one answer | Parallel retrieval across `search_messages`, `search_documents`, and `query_tasks` synthesizes multi-source answers (e.g., Makassar stock delay cause from Slack/WhatsApp + escalation SOP from Confluence + open tickets from Jira `OPS`). |
+1. **Identify** the user from the session or MCP token and load their roles from the database.
+   Role claims typed into the chat ("saya HRD") are ignored.
+2. **Understand** the question (language, intent, search queries, whether personal data is needed).
+3. **Policy gate**: refuse write requests and salary questions about named people before any search.
+4. **Retrieve** with hybrid search (vector, full text, trigram) over chat, documents and tasks.
+   The permission filter runs inside the SQL query, before scoring, so restricted items never
+   enter the candidate list.
+5. **Extract evidence**: the model turns sources into claims, each tied to one source.
+   Code then resolves conflicts: an official source beats team discussion, a newer official
+   source beats an older one, a same-day tie is shown as a tie and sent to the topic owner.
+6. **Compose** the answer from the decided claims only.
+7. **Validate**: every sentence must cite a source the user was allowed to retrieve, and every
+   number must appear in the cited source. Personal data the user may not see is masked again.
+   A failing answer is rewritten once; if it still fails, the user gets "I don't know".
+8. **Record** the question, retrieved sources, answer and all eight steps in a hash-chained audit log.
 
----
+When nothing visible answers the question, the reply is a fixed template built only from the words
+the user typed and the public topic owner. A question about the hidden Proyek Kenari and one about
+a project that does not exist return the same text.
 
-## 4. One-Page Accountability Summary
+### Architecture
 
-> Full standalone sheet: **[`ACCOUNTABILITY_SHEET.md`](./ACCOUNTABILITY_SHEET.md)**
+<img width="1141" height="677" alt="Knowhaven architecture" src="https://github.com/user-attachments/assets/e823fbd5-726b-4884-9dc6-e4a98b9b2eef" />
 
-| Dimension | Policy & Technical Boundary |
-| :--- | :--- |
-| **🔍 Can Access** | Only data inside the user's active tenant (PostgreSQL `FORCE ROW LEVEL SECURITY`) across mapped (`mapped=true`) Slack channels, WhatsApp exports, Confluence spaces, uploaded documents, and Jira projects permitted by the user's active business roles, item overrides (`deny` beats `allow`), or active `temp_grants`. |
-| **⚡ Executes Autonomously** | Language/intent analysis, pre-filtered hybrid RRF search, claim extraction, deterministic conflict resolution, PII masking, citation/number validation, HITL draft proposal, and append-only hash-chained audit logging. |
-| **✋ Requires Human Approval** | 1. **External/Document Writes:** Applying a proposed SOP update (`ActionDraft` unified diff) to Confluence or internal docs.<br>2. **Privilege Elevation:** Granting temporary access (`TempGrant`) to `gated` topics such as Salary Grade Tables (`AccessRequest`). |
-| **🚫 Will Never Do** | Never return data from another tenant; never confirm or imply that `hidden` content exists; never accept role claims from chat text or headers; never follow instructions embedded inside documents; never execute external writes without human approval; never send unmasked PII to the LLM without role permission and query need. |
+| Trust boundary | What crosses it | How it is enforced |
+|---|---|---|
+| Client entry | Browser requests, WorkBuddy MCP calls | HttpOnly session cookie with CSRF token, or a personal MCP token stored as a SHA-256 hash. Roles are re-read from the database on every request. |
+| Retrieval | Question to search | The permission filter is part of the SQL query and built from the server-side request context, never from model output. |
+| Database | Backend to PostgreSQL | The app connects as a role without `BYPASSRLS`; every tenant table has forced row-level security. The audit log is insert-only for that role. |
+| Writes | Proposed document changes, access grants | The assistant has no write credentials. Changes are drafts until a human approves them on the Approvals page. |
+| Model provider | Filtered text to Gemini | Personal data is masked at ingestion. Raw values are sent only when the user's role may see that data type and the question needs it. |
 
----
+### Key design trade-offs
 
-## 5. WorkBuddy Integration & Product Sharing
+| Decision | Alternative we rejected | Reason |
+|---|---|---|
+| One high-level MCP tool (`ask_workplace_brain`) for WorkBuddy | Exposing raw search tools to WorkBuddy | WorkBuddy's own model would compose answers from raw chunks and bypass conflict resolution, the "I don't know" template and the validator. |
+| Permission filter inside the search query | Filtering the top-k results afterwards | Post-filtering changes result counts and scores, which reveals that hidden items exist. |
+| Code resolves conflicts | Asking the model to pick the right source | Rules give the same result every time and can be explained in one sentence. |
+| Masked text stored next to raw text | Masking only in the final prompt | Search runs on masked text, so nobody can find a colleague's NIK by searching for it. |
+| Small Gemini Flash models per step, with a hedged second model for the answer | One large model for everything | Keeps the 95th-percentile answer time at 15.7 seconds, well inside the 90-second test limit. |
 
-### How WorkBuddy Connects to Knowhaven
-Users generate a personal `wbk_...` token in **Settings → Hubungkan WorkBuddy** (`/settings/workbuddy`) and paste the generated snippet into `~/.workbuddy/mcp.json`. WorkBuddy connects over HTTPS to our stateless MCP server (`brain-mcp`), which exposes three read/ask-only tools:
-- `ask_workplace_brain(question, conversation_id?)` — Runs the full 8-step accountable pipeline and returns the validated answer with citations.
-- `open_source(item_id)` — Re-verifies permissions and returns the source chunks (returning identical `NOT_FOUND` for hidden and non-existent IDs).
-- `whoami()` — Displays the user's live identity, active company, and database roles.
+### Prompt design
 
-### Where WorkBuddy Added Value in Our Build
-1. **Realistic Indonesian Enterprise Dataset Generation:** We used WorkBuddy to draft and cross-check our multi-tenant seed data (`PT Sinar Rantai Nusantara` and `CV Kopi Lereng Merapi`), including realistic Indonesian office slang (`brp`, `yg`, `utk`), multi-source causal chains (Makassar shipping delay across Slack, WhatsApp, Confluence, and Jira), and adversarial prompt injection traps.
-2. **Adversarial Leak & Conflict Red-Teaming:** Connecting WorkBuddy as a live MCP client allowed us to test role changes in the web UI and immediately verify in WorkBuddy (`whoami` + `ask_workplace_brain`) that revoked permissions take effect on the very next tool call without re-issuing tokens.
-3. **Key Learning:** Giving an external desktop agent raw search tools is a security trap—wrapping the entire policy and validation pipeline inside a single high-level MCP tool (`ask_workplace_brain`) is essential to preserve zero-leakage guarantees across clients.
+The prompts are short and each one has a single job; the behaviour that matters is enforced in code
+around them.
 
----
+- **Data is never instructions.** Questions, history and sources are wrapped in XML tags, and every
+  prompt says that text inside them is data. Sources that contain instructions aimed at an AI are
+  flagged at ingestion, and the answer tells the user that such an instruction was ignored.
+- **The model extracts, code decides, the model explains.** The extraction prompt returns claims
+  with exactly one citation each and treats a change announcement ("naik dari Rp500.000 menjadi
+  Rp750.000") as a claim of the new value only. Conflict rules then run in code, and the answer
+  prompt receives the decision plus a reason sentence written by code.
+- **Answer first.** The answer prompt asks for the direct answer in one sentence, then a few cited
+  bullets for conditions and exceptions, with examples taken from an invented company so that no
+  real data can leak through the prompt.
+- **Clarify instead of guessing.** A question with no subject ("Berapa batasnya?") gets a short
+  clarifying question before any search.
+- **Versioned.** The prompt version is stored on every audit row, so any answer can be traced to
+  the prompts that produced it.
 
-## 6. Measurable Business Value
+## Results
 
-- **Faster Onboarding & Cross-Team Alignment:** Cuts policy and project lookup time from **15–30 minutes** (searching across Slack threads, Confluence spaces, and Jira boards) to **<10 seconds** with verifiable `[CHAT/DOC/TASK]` citations.
-- **Zero-Leakage Confidentiality:** Eliminates accidental disclosure of M&A projects (`Proyek Kenari`), HR internal discussions, and colleague PII (`NIK`, `NPWP`, phone, bank accounts) through SQL pre-filtering and deterministic templates.
-- **Automated Policy Hygiene (HITL):** Detects when official chat announcements supersede written SOPs and automatically prepares a ready-to-approve diff for the document owner—closing the gap between announcements and documentation.
+Measured against the live deployment on 25 October 2026. Details and failures are in
+[TEST_RESULTS.md](./TEST_RESULTS.md); metric definitions in
+[backend/eval/README.md](./backend/eval/README.md).
 
----
+| Measure | Result |
+|---|---|
+| Restricted-data probes that leaked anything | 0 of 15 |
+| Answers backed by retrieved, validated citations | 100% |
+| Golden-set accuracy (all checks of a case pass) | 87.9% (51 of 58) |
+| Correct source in the top 10 retrieved (Recall@10) | 96.3% |
+| Answer time, median / 95th percentile | 9.0 s / 15.7 s |
 
-## 7. Demo Personas & Quickstart
+The main open issue is over-caution: 4 of 38 answerable questions got "I don't know" although the
+data exists (see TEST_RESULTS.md).
 
-### Seeded Demo Accounts (PT Sinar Rantai Nusantara & CV Kopi Lereng Merapi)
+## Business value
 
-| Persona | Email | Password | Roles | Primary Test Scenarios |
-| :--- | :--- | :--- | :--- | :--- |
-| **Dimas Pratama** | `dimas@srn-demo.id` | `Demo-SRN-2026!` | `new_hire`, `staff` | Onboarding, fuel conflict (`T06`), leave (`T09`), Kenari zero-leak probe (`T01–T03`) |
-| **Rina Wulandari** | `rina@srn-demo.id` | `Demo-SRN-2026!` | `staff`, `ops`, `ops_makassar` | Makassar synthesis (`T12`), access revocation (`T13`), gated salary grade request (`T14`), injection (`T16`) |
-| **Andi Saputra** | `andi@srn-demo.id` | `Demo-SRN-2026!` | `project_mgr` | Authorized holder of `Proyek Kenari` comparison (`#proyek-kenari`, `RAHASIA`, `KNR`) |
-| **Sari Kusuma** | `sari@srn-demo.id` | `Demo-SRN-2026!` | `hr` | HR policy owner, authorized PII lookup (`T18`), SOP diff approver |
-| **Budi Hartono** | `budi.hartono@srn-demo.id` | `Demo-SRN-2026!` | `ops`, `ops_makassar` (Manager) | Approver for Operational access requests & action drafts (`/approvals`) |
-| **Lina Marpaung** | `lina@srn-demo.id` | `Demo-SRN-2026!` | `auditor` | Full audit log, filtered item IDs, SHA-256 hash-chain verification (`/audit`, `T26`) |
-| **Admin SRN** | `admin@srn-demo.id` | `Demo-SRN-2026!` | `owner`, `admin` | RBAC, container mapping (`T25`), integrations, invites (note: system role alone grants 0 content access) |
-| **Yoga Prasetyo** | `yoga@konsultan-demo.id` | `Demo-Konsultan-2026!` | `staff` (SRN) & `admin` (KLM) | Multi-tenant switcher & cross-tenant isolation (`T29`) |
-| **Wulan Sari** | `wulan@klm-demo.id` | `Demo-KLM-2026!` | `staff` (KLM only) | Cross-tenant zero-leakage verification (`T28`) |
+- **Answers in seconds instead of a search across three tools.** A new hire gets the current
+  allowance, the approver for a claim, or the status of a delayed shipment with the source attached,
+  in a median of 9 seconds.
+- **No accidental disclosure.** Salaries, personal data and confidential projects stay with the
+  people allowed to see them, which matters for the data-protection impact assessments required
+  under PP 33/2026 from January 2027.
+- **Documents stay current.** When an announcement supersedes an SOP, Knowhaven answers with the new
+  value and drafts the SOP update for the owner to approve, so the gap between chat and
+  documentation closes.
 
-### Run Locally or via Docker Compose
+## WorkBuddy
+
+Each user creates a personal token under Settings, then in WorkBuddy adds a custom MCP connector
+(Connectors, Custom connectors, Add MCP) and creates a "Knowhaven" expert from the prompt shown on
+the same page. The connector exposes three read-only tools:
+
+- `ask_workplace_brain`: runs the full pipeline and returns the validated answer with citations.
+- `open_source`: opens a cited source after re-checking permissions; hidden and non-existent ids
+  return the same "not found".
+- `whoami`: shows the user, active company and roles.
+
+A role change in the web app applies on the next WorkBuddy call, without a new token.
+
+**What we learned:** giving a desktop agent raw search tools would have undone the permission and
+validation guarantees, so WorkBuddy talks to Knowhaven only through the full pipeline. The backend
+cannot clear answers that are already displayed in a user's WorkBuddy window; this is disclosed in
+the accountability sheet.
+
+<!-- TODO (team): add 2-3 sentences on how the team used WorkBuddy while building, from your own
+experience, before submitting. Product sharing is a required submission item. -->
+
+## Try it
+
+The live demo link is in the submission form. Demo accounts:
+
+| Account | Password | Role | Good for |
+|---|---|---|---|
+| dimas@srn-demo.id | Demo-SRN-2026! | New hire, Jakarta warehouse | Policies, conflicts, masked personal data, Proyek Kenari probe, access request |
+| rina@srn-demo.id | Demo-SRN-2026! | Operations staff, Makassar | Chat, documents and Jira in one answer; no access to HR or finance data |
+| sari@srn-demo.id | Demo-SRN-2026! | HR manager | Personal data when the task needs it; approving access requests and document drafts |
+| bambang@srn-demo.id | Demo-SRN-2026! | CEO (owner, admin, auditor) | Proyek Kenari, audit log, mapping sources and roles |
+| yoga@konsultan-demo.id | Demo-Konsultan-2026! | External consultant in both companies | Switching companies; no data crosses between them |
+
+Questions to try: "Uang bensin per bulan berapa?", "Proyek Kenari itu apa?" (as Dimas, then as
+Bambang), "Tabel grade gaji level 3 berapa?" (as Dimas, then request access and approve as Sari).
+
+## Run locally
 
 ```bash
-# 1. Backend setup & seed demo tenants (SRN + KLM)
-cd the-workplace-brain/backend
+cd backend
 uv sync
 uv run alembic upgrade head
-uv run brain-seed
+uv run brain-seed                  # demo companies SRN and KLM
+uv run brain                       # API on :8000
+uv run brain-mcp --port 8001       # MCP server for WorkBuddy
 
-# 2. Run API (:8000) and WorkBuddy MCP Server (:8001)
-uv run brain
-uv run brain-mcp --host 0.0.0.0 --port 8001
-
-# 3. Run Next.js 16 Frontend (:3000)
 cd ../frontend
-npm ci && npm run dev
-
-# 4. Or run the full production stack (Caddy + Web + API + MCP + Worker)
-docker compose up --build -d
+npm ci && npm run dev              # web app on :3000
 ```
+
+Or run everything (Caddy, web, API, MCP server, worker) with `docker compose up --build -d`.
+Configuration is described in `.env.example`.
+
+## Stack
+
+| Layer | Technology |
+|---|---|
+| Web app | Next.js 16, React 19 |
+| API and pipeline | FastAPI, SQLAlchemy (async), Agno |
+| Database and search | PostgreSQL on Neon with pgvector, full-text search and pg_trgm; forced row-level security |
+| File storage | Neon object storage (S3-compatible) for uploaded originals |
+| Models | Gemini Flash models on Vertex AI (3.5 Flash-Lite, 3.6 Flash, 3.7 Flash) and Gemini embeddings |
+| WorkBuddy | MCP server (streamable HTTP) with personal tokens |
+| Integrations | Slack Events API and OAuth; Confluence and Jira synced by a worker every two minutes; uploads (PDF, DOCX, Markdown) and WhatsApp exports |
+| Hosting | Docker Compose on Tencent Cloud Lighthouse, Caddy for HTTPS |
+| Evaluation | `brain-eval` with a 58-question golden set |
