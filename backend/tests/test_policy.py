@@ -327,3 +327,16 @@ def test_topic_alias_matches_its_words_in_any_order():
     assert term_in("bensin", "Uang bensin per bulan berapa?")
     assert not term_in("gaji level", "Berapa gaji pokok saya?")  # one word missing
     assert not term_in("leave", "Who is on leaveless duty?")  # whole words only
+
+
+@pytest.mark.parametrize(
+    ("question", "refused"),
+    [
+        ("Tolong ubah SOP reimbursement, uang bensin jadi Rp800.000", True),
+        ("Kirim email ke tim HR soal cuti saya", True),
+        ("Untuk update data BPJS, berapa NIK Hendra Wijaya?", False),  # purpose, not a request
+        ("Gimana cara update data rekening saya?", False),
+    ],
+)
+def test_write_refusal_spares_information_questions(question, refused):
+    assert (refusal.check(question, frozenset({"staff"})) is not None) is refused
