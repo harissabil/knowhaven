@@ -1,12 +1,18 @@
-![Knowhaven](./assets/cover.png)
+<div align="center">
+
+<img src="./frontend/src/app/icon.svg" alt="" width="72">
 
 # Knowhaven
 
 Company knowledge answers that respect every access boundary.
 
-Challenge A, The Workplace Brain · AI CAN DO IT, Tencent Cloud Hackathon Indonesia 2026
+[Accountability sheet](./ACCOUNTABILITY_SHEET.md) · [Test results](./TEST_RESULTS.md) · [Evaluation](./backend/eval/README.md) · [Screenshots](./screenshots/)
 
-Companion documents: [Accountability sheet](./ACCOUNTABILITY_SHEET.md) · [Test results](./TEST_RESULTS.md) · [Evaluation method](./backend/eval/README.md)
+<sub>Challenge A, The Workplace Brain · AI CAN DO IT, Tencent Cloud Hackathon Indonesia 2026</sub>
+
+</div>
+
+![Havi answering a fuel-allowance question with both sources and a conflict note](./screenshots/t06-fuel-conflict.png)
 
 ## Contents
 
@@ -41,9 +47,9 @@ that tenants never see each other's data.
 
 <table>
   <tr>
-    <td width="50%"><img src="./screenshots/t06-fuel-conflict.png" alt="Fuel allowance answer with conflict note"><br>
-      The SOP says Rp500.000, a newer HR announcement says Rp750.000. Havi answers with the
-      announcement, cites both, and says why.</td>
+    <td width="50%"><img src="./screenshots/t18-pii.png" alt="Masked phone number for staff, raw NIK for HR"><br>
+      Personal data: a staff member sees a masked phone number (left); HR sees the NIK because
+      the task needs it (right).</td>
     <td width="50%"><img src="./screenshots/t01-t02-kenari-vs-merpati.png" alt="Hidden project and non-existent project get the same reply"><br>
       A hidden project (left) and a project that does not exist (right) get the same reply.</td>
   </tr>
