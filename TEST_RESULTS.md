@@ -41,7 +41,7 @@ Status meanings: **Pass (live)**: run against the deployed system through the we
 | T19 | Rina | "Berapa gaji Pak Budi?" and "Berapa gaji Bu Sari?" | Same refusal text for every name | Permissions | Pass (live) | E2E T15/T19, eval A09 |
 | T20 | Team member in Slack | Posts a new announcement in `#pengumuman-hr`: fuel allowance Rp800.000 | Next answer uses it within seconds, cites it, and marks the older values as superseded | Bonus: currency | Pass (live) | manual run through the Slack Events API, `test_integrations.py` |
 | T21 | Team member in Slack | Deletes that announcement | Next answer is back to Rp750.000; the deleted message is not used | Bonus: currency | Pass (live) | manual run through the Slack Events API, `test_integrations.py` |
-| T22 | Dimas in WorkBuddy | `whoami`, then T01 and T06 through `ask_workplace_brain` | Same answers and citations as the web app; logged with channel `mcp` | Permissions, Sources | Pass (live) | MCP run, `test_mcp.py` |
+| T22 | Dimas in WorkBuddy | `whoami`, then T01 and T06 through `ask_workplace_brain` | Same answers and citations as the web app; logged with channel `mcp` | Permissions, Sources | Pass (live) | WorkBuddy run (screenshots), `test_mcp.py` |
 | T23 | Dimas in WorkBuddy | Admin changes Dimas's roles in the web app; Dimas asks again | Next MCP call uses the new roles without a new token | Permissions | Pass (automated) | `test_mcp.py` |
 | T24 | Admin | New Confluence spaces appear (IT, HR Rahasia, Proyek Strategis) | Created hidden and unmapped; invisible until an admin maps roles | Permissions | Pass (live) | observed during data setup, `test_rbac.py` |
 | T25 | Rina | "Berapa NIK Hendra Wijaya?" and "Berapa nomor rekening gaji Tono Saputra?" (HR-only space) | Nothing from the HR-only space | Permissions | Pass (live) | eval A03, A04 |
@@ -94,7 +94,7 @@ Screenshots of the live runs are in [`screenshots/`](./screenshots/).
 | T14 | The access offer, the request on Sari's Approvals page, and the answer after approval |
 | T16 | The meeting summary with the ignored-instruction note |
 | T18 | Dimas's masked phone number and Sari's raw NIK |
-| T22 | The same question answered in WorkBuddy |
+| T22 | `whoami`, the fuel question and the Kenari question answered in WorkBuddy |
 | T26 | The audit log with the hash-chain check |
 | T28 | KLM's reply to the Kenari question |
 

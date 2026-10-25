@@ -1,14 +1,23 @@
+<div align="center">
+
+<img src="./frontend/src/app/icon.svg" alt="" width="72">
+
 # Knowhaven
 
 Company knowledge answers that respect every access boundary.
 
-Challenge A, The Workplace Brain · AI CAN DO IT, Tencent Cloud Hackathon Indonesia 2026
+[Accountability sheet](./ACCOUNTABILITY_SHEET.md) · [Test results](./TEST_RESULTS.md) · [Evaluation](./backend/eval/README.md) · [Screenshots](./screenshots/)
 
-Companion documents: [Accountability sheet](./ACCOUNTABILITY_SHEET.md) · [Test results](./TEST_RESULTS.md) · [Evaluation method](./backend/eval/README.md)
+<sub>Challenge A, The Workplace Brain · AI CAN DO IT, Tencent Cloud Hackathon Indonesia 2026</sub>
+
+</div>
+
+![Havi answering a fuel-allowance question with both sources and a conflict note](./screenshots/t06-fuel-conflict.png)
 
 ## Contents
 
 - [Overview](#overview)
+- [In action](#in-action)
 - [The problem](#the-problem)
 - [How it works](#how-it-works): [architecture](#architecture), [design trade-offs](#key-design-trade-offs), [prompt design](#prompt-design)
 - [Results](#results)
@@ -33,6 +42,28 @@ the same backend and the same permission checks.
 The demo company is PT Sinar Rantai Nusantara, a fictional consumer-goods distributor with
 warehouses in Jakarta, Surabaya and Makassar, plus a second company (CV Kopi Lereng Merapi) to show
 that tenants never see each other's data.
+
+## In action
+
+<table>
+  <tr>
+    <td width="50%"><img src="./screenshots/t18-pii.png" alt="Masked phone number for staff, raw NIK for HR"><br>
+      Personal data: a staff member sees a masked phone number (left); HR sees the NIK because
+      the task needs it (right).</td>
+    <td width="50%"><img src="./screenshots/t01-t02-kenari-vs-merpati.png" alt="Hidden project and non-existent project get the same reply"><br>
+      A hidden project (left) and a project that does not exist (right) get the same reply.</td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="./screenshots/t14-access-request.png" alt="Access request, approval, answer"><br>
+      A restricted topic: the new hire requests access, HR approves it, the next answer is
+      allowed.</td>
+    <td width="50%"><img src="./screenshots/t22-workbuddy-fuel.png" alt="The same answer inside WorkBuddy"><br>
+      The same question in WorkBuddy, through the MCP connector, with the same answer and
+      sources.</td>
+  </tr>
+</table>
+
+More screenshots, one per test, are in [`screenshots/`](./screenshots/).
 
 ## The problem
 
