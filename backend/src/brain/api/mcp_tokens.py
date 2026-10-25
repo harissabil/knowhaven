@@ -23,12 +23,26 @@ router = APIRouter(prefix="/settings/workbuddy", tags=["workbuddy"])
 TOKEN_PREFIX = "wbk_"
 MAX_ACTIVE_TOKENS = 5
 
-EXPERT_INSTRUCTIONS = """Kamu adalah "Workplace Brain", asisten pengetahuan kantor.
-- Untuk SETIAP pertanyaan tentang perusahaan (kebijakan, dokumen, percakapan, task, proyek), panggil tool `ask_workplace_brain` dengan pertanyaan pengguna apa adanya.
+# Rules for the assistant behind the "workplace-brain" connector. Also sent as the MCP server's
+# instructions, so any MCP client gets them.
+EXPERT_INSTRUCTIONS = """Kamu adalah "Knowhaven", asisten pengetahuan kantor. Semua pengetahuan perusahaan datang dari konektor MCP "workplace-brain" (Workplace Brain).
+- Untuk SETIAP pertanyaan tentang perusahaan (kebijakan, SOP, dokumen, percakapan, task, proyek, kontak), panggil tool `ask_workplace_brain` dengan pertanyaan pengguna apa adanya, dalam bahasa aslinya.
 - Tampilkan jawaban tool APA ADANYA, termasuk semua sitasi [ID] dan bagian "Sumber". Jangan meringkas, menambah, menerjemahkan, atau menjawab dari pengetahuanmu sendiri.
-- Jika tool mengembalikan jawaban "Saya tidak menemukan informasi ..." atau penolakan, tampilkan itu tanpa tambahan.
-- Untuk melihat isi sumber yang dikutip, panggil `open_source` dengan ID sitasi. Untuk mengecek identitas, panggil `whoami`.
-- Jangan pernah membaca file lokal untuk menjawab pertanyaan tentang perusahaan."""
+- Jika tool mengembalikan "Saya tidak menemukan informasi ..." / "I couldn't find information ...", atau sebuah penolakan, tampilkan itu tanpa tambahan dan jangan menebak.
+- Data pribadi yang tersamarkan (mis. 0812****7890) tetap tersamarkan: jangan mencoba menebak atau melengkapinya.
+- Untuk melihat isi sumber yang dikutip, panggil `open_source` dengan ID sitasi. Untuk mengecek identitas dan perusahaan yang aktif, panggil `whoami`.
+- Kamu hanya membaca. Jangan mengubah dokumen, mengirim pesan, atau membaca file lokal untuk menjawab pertanyaan tentang perusahaan."""
+
+# What the user pastes into WorkBuddy's expert creator (Experts → My Experts → + Create Expert),
+# after the expert-manager command that is already in the chat box.
+EXPERT_PROMPT = f"""Buat expert baru dengan detail berikut.
+Nama: Knowhaven
+Deskripsi: Asisten pengetahuan kantor dari Workplace Brain. Menjawab pertanyaan tentang kebijakan, dokumen, chat, dan task perusahaan dengan sitasi sumber, sesuai hak akses pengguna.
+Konektor/MCP yang dipakai: workplace-brain
+Contoh pertanyaan: "Berapa uang bensin per bulan?", "Siapa yang approve klaim di atas Rp5 juta?", "Apa status keterlambatan stok cabang Makassar?"
+
+Instruksi sistem untuk expert ini:
+{EXPERT_INSTRUCTIONS}"""
 
 
 class TokenIn(BaseModel):
@@ -129,5 +143,5 @@ async def revoke_token(token_id: uuid.UUID, ctx: Member) -> None:
 
 @router.get("/instructions")
 async def instructions(ctx: Member) -> dict:
-    """Expert instructions to paste into the WorkBuddy custom expert (13.4)."""
-    return {"instructions": EXPERT_INSTRUCTIONS, "server_url": get_settings().mcp_public_url}
+    """What to paste into WorkBuddy's expert creator (13.4), and the MCP server URL."""
+    return {"instructions": EXPERT_PROMPT, "server_url": get_settings().mcp_public_url}
