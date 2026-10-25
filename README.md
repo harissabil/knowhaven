@@ -75,7 +75,7 @@ a project that does not exist return the same text.
 
 ### Architecture
 
-<img width="1141" height="677" alt="Knowhaven architecture" src="https://github.com/user-attachments/assets/e823fbd5-726b-4884-9dc6-e4a98b9b2eef" />
+![Knowhaven architecture](https://github.com/user-attachments/assets/e823fbd5-726b-4884-9dc6-e4a98b9b2eef)
 
 | Trust boundary | What crosses it | How it is enforced |
 |---|---|---|
