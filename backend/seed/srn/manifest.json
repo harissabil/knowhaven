@@ -92,7 +92,7 @@
      "aliases": ["bpjs", "asuransi", "rawat inap", "rawat jalan", "kacamata", "health insurance", "medical"], "fallback_contact": "HR Helpdesk (hr-helpdesk@sinarrantai.example)"},
     {"key": "payroll", "display_name": "Jadwal gaji & payroll", "owner": "sari@srn-demo.id", "tier": "open",
      "aliases": ["gajian", "tanggal gaji", "payroll", "slip gaji", "payday", "cut-off"], "fallback_contact": "HR Helpdesk (hr-helpdesk@sinarrantai.example)"},
-    {"key": "pengadaan", "display_name": "Pengadaan barang & jasa", "owner": "budi.santoso@srn-demo.id", "tier": "gated",
+    {"key": "pengadaan", "display_name": "Pengadaan barang & jasa", "owner": "bambang@srn-demo.id", "tier": "gated",
      "container": "space-fin", "aliases": ["pengadaan", "procurement", "vendor", "purchase order", "penawaran harga", "pembelian", "penawaran", "tender"],
      "fallback_contact": "Tim Keuangan (finance@sinarrantai.example)"},
     {"key": "k3", "display_name": "K3 & keselamatan gudang", "owner": "budi.hartono@srn-demo.id", "tier": "open",
