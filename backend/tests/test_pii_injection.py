@@ -12,7 +12,7 @@ CO = frozenset({"srn.co.id"})
     ("text", "expected"),
     [
         ("NIK saya 3201234501900001 ya", "NIK saya 3201********0001 ya"),
-        ("hp 0812-3456-7890 atau +62 812 3456 7890", "hp 0812****7890 atau 6281*****7890"),
+        ("hp 0812-3456-7890 atau +62 812 3456 7890", "hp 0812****7890 atau 0812****7890"),
         (
             "email pribadi rina.w@gmail.com, kantor rina@srn.co.id",
             "email pribadi r***@gmail.com, kantor rina@srn.co.id",
@@ -26,6 +26,56 @@ CO = frozenset({"srn.co.id"})
 def test_masking(text, expected):
     masked, spans = mask_text(text, CO)
     assert masked == expected and spans
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        # phones: any common grouping, always masked to the same shape
+        ("HP (0812) 3456 7890", "HP 0812****7890"),
+        ("HP 0812.3456.7890", "HP 0812****7890"),
+        ("HP +62 (812) 3456-7890", "HP 0812****7890"),
+        ("HP +6281234567890", "HP 0812****7890"),
+        ("wa.me/6281234567890", "wa.me/0812****7890"),
+        ("HP 08 12 34 56 78 90", "HP 0812****7890"),
+        # NIK in groups of four, and a labelled NIK even when the number is invalid
+        ("NIK 3171 0125 0199 0003", "NIK 3171********0003"),
+        ("NIK 3171-0125-0199-0003", "NIK 3171********0003"),
+        ("NIK 3171.0125.0199.0003", "NIK 3171********0003"),
+        ("NIK 3171013201990003", "NIK 3171********0003"),  # day 32
+        ("NIK: 317101250199000", "NIK: 3171*******9000"),  # 15 digits
+        # spelled-out emails
+        ("email rina[at]gmail.com", "email r***@gmail.com"),
+        ("email rina (at) gmail (dot) com", "email r***@gmail.com"),
+        ("email rina at gmail dot com", "email r***@gmail.com"),
+        ("kantor rina at srn dot co dot id", "kantor rina at srn dot co dot id"),
+        # bank account without a bank name
+        ("transfer ke 1234567890 a.n. Rina", "transfer ke ******7890 a.n. Rina"),
+        ("norek: 1234567890", "norek: ******7890"),
+        ("0123456789 atas nama Budi", "******6789 atas nama Budi"),
+    ],
+)
+def test_masking_unusual_formats(text, expected):
+    assert mask_text(text, CO)[0] == expected
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Anggaran Rp1.080.000.000 disetujui",
+        "Laba naik menjadi Rp 4.812.000.000",
+        "Rapat 08-10-2026 14:00 di ruang 3",
+        "tanggal 08.10.2026 jam 08.30",
+        "kantor (021) 555-1234 ext 101",
+        "nomor invoice 1234567890123456",
+        "invoice INV/2026/10/000812, PO 2026100812345",
+        "waktu 2026-10-25T08:12:34+07:00",
+        "kami bertemu at kantor jam 9",
+        "Tiket OPS-118, kapasitas 1200 pallet",
+    ],
+)
+def test_lookalikes_are_not_masked(text):
+    assert mask_text(text, CO)[0] == text
 
 
 def test_partial_pii_permissions_mask_only_disabled_types():

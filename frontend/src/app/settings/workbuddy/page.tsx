@@ -1,7 +1,7 @@
 "use client";
 import { copyText } from "@/lib/clipboard";
-import { useCallback, useEffect, useState } from "react";
-import { KeyRound, Copy, Check, Trash2 } from "lucide-react";
+import { Fragment, useCallback, useEffect, useState } from "react";
+import { KeyRound, Copy, Check, Trash2, ChevronRight, Info } from "lucide-react";
 import { Shell } from "@/components/Shell";
 import { WorkBuddyLogo } from "@/components/BrandLogos";
 import { usePersona, useSession } from "@/store/session";
@@ -9,6 +9,34 @@ import { useL, useT } from "@/lib/i18n";
 import { apiFetch, errorText } from "@/lib/api";
 import type { TokenCreated, TokenOut } from "@/lib/contracts";
 import { toast } from "@/components/ui/Toast";
+
+/** "Connectors › Custom connectors › + Add MCP" as menu chips. */
+function MenuPath({ items }: { items: string[] }) {
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1 align-middle">
+      {items.map((it, i) => (
+        <Fragment key={it}>
+          {i > 0 && <ChevronRight size={13} className="text-muted" aria-hidden />}
+          <kbd className="px-1.5 py-0.5 rounded-md border border-line bg-surface2 text-xs font-medium font-sans text-fg">{it}</kbd>
+        </Fragment>
+      ))}
+    </span>
+  );
+}
+
+function Step({ n, title, done, children }: { n: number; title: string; done?: boolean; children: React.ReactNode }) {
+  return (
+    <li className="flex gap-4">
+      <div className={`shrink-0 w-8 h-8 rounded-full grid place-items-center text-sm font-semibold ${done ? "bg-ok/15 text-ok" : "bg-tint text-brand"}`}>
+        {done ? <Check size={16} /> : n}
+      </div>
+      <div className="flex-1 min-w-0 flex flex-col gap-3 pb-2">
+        <h3 className="font-semibold leading-8">{title}</h3>
+        {children}
+      </div>
+    </li>
+  );
+}
 
 export default function WorkBuddy() {
   const t = useT();
@@ -64,7 +92,7 @@ export default function WorkBuddy() {
     }
   }
 
-  // Before a token exists, show the shape with a placeholder; the real file comes from the backend.
+  // Before a token exists, show the shape with a placeholder; the real config comes from the backend.
   const cfg = created?.mcp_json ?? JSON.stringify(
     { mcpServers: { "workplace-brain": { type: "streamableHttp", url: info?.server_url ?? "…/mcp", headers: { Authorization: "Bearer <token>" } } } },
     null,
@@ -75,61 +103,97 @@ export default function WorkBuddy() {
     if (await copyText(text)) {
       setCopied(which);
       toast(l("Disalin ke clipboard", "Copied to clipboard"));
-      setTimeout(() => setCopied(""), 2000);} else { toast(l("Gagal menyalin. Salin manual ya.", "Could not copy. Please copy it manually.")); }
+      setTimeout(() => setCopied(""), 2000);
+    } else {
+      toast(l("Gagal menyalin. Salin manual ya.", "Could not copy. Please copy it manually."));
+    }
   }
+
+  const copyBtn = (text: string, which: "cfg" | "ins", label: string, primary = false) => (
+    <button className={`btn ${primary ? "btn-primary" : ""}`} onClick={() => copy(text, which)}>
+      {copied === which ? <Check size={16} /> : <Copy size={16} />}
+      {copied === which ? l("Tersalin", "Copied") : label}
+    </button>
+  );
 
   return (
     <Shell title={t("workbuddy")}>
-      <div className="card p-6 flex flex-col gap-4 max-w-2xl">
+      <div className="card p-6 flex flex-col gap-6 max-w-3xl">
         <div>
-          <div className="flex items-center gap-2.5 mb-1.5"><WorkBuddyLogo size={28} /><h2 className="text-xl font-bold">WorkBuddy MCP</h2></div>
+          <div className="flex items-center gap-2.5 mb-3"><WorkBuddyLogo size={28} /><h2 className="text-xl font-bold">{l("Hubungkan Knowhaven ke WorkBuddy", "Connect Knowhaven to WorkBuddy")}</h2></div>
           <p className="text-sm text-muted">
-            {l("Token terikat ke", "The token is bound to")} <b className="text-fg">{persona?.name}</b>{" "}
-            {l("di", "in")} <b className="text-fg">{tenantName}</b>.{" "}
+            {l("Tanya Knowhaven langsung dari WorkBuddy. Token terikat ke", "Ask Knowhaven right from WorkBuddy. The token is bound to")}{" "}
+            <b className="text-fg">{persona?.name}</b> {l("di", "in")} <b className="text-fg">{tenantName}</b>.{" "}
             {l("WorkBuddy hanya melihat apa yang boleh Anda lihat; perubahan peran berlaku seketika.", "WorkBuddy sees only what you may see; role changes apply immediately.")}
           </p>
         </div>
 
-        <div className="flex gap-2 items-center flex-wrap">
-          <input className="input !w-48" value={label} onChange={(e) => setLabel(e.target.value)} aria-label={l("Label token", "Token label")} />
-          <button className="btn btn-primary" onClick={createToken} disabled={loading}>
-            <KeyRound size={16} />
-            {loading ? l("Membuat…", "Generating…") : l("Buat token baru", "Generate new token")}
-          </button>
-          {created && (
-            <button className="btn" onClick={() => copy(cfg, "cfg")}>
-              {copied === "cfg" ? <Check size={16} className="text-ok" /> : <Copy size={16} />}
-              {copied === "cfg" ? l("Tersalin", "Copied") : l("Salin mcp.json", "Copy mcp.json")}
-            </button>
-          )}
-        </div>
-        {err && <p role="alert" className="text-bad text-sm">{err}</p>}
-
-        {created && (
-          <div className="p-3 bg-ok/10 border border-ok/30 rounded-erp text-xs text-ok">
-            {l("Simpan konfigurasi ini sekarang. Token hanya ditampilkan satu kali.", "Save this config now. The token is shown only once.")}
-          </div>
-        )}
-
-        <div>
-          <label className="text-xs text-muted mb-1 block">mcp.json</label>
-          <pre className="bg-surface2 p-3.5 rounded-erp text-xs font-mono overflow-x-auto border border-line">{cfg}</pre>
-        </div>
-
-        {info && (
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="text-xs text-muted">{l("Instruksi expert WorkBuddy", "WorkBuddy expert instructions")}</label>
-              <button className="btn !py-0.5 !px-2 text-xs" onClick={() => copy(info.instructions, "ins")}>
-                {copied === "ins" ? <Check size={12} /> : <Copy size={12} />} {l("Salin", "Copy")}
+        <ol className="flex flex-col gap-5">
+          <Step n={1} title={l("Buat token MCP", "Generate an MCP token")} done={!!created}>
+            <div className="flex gap-2 items-center flex-wrap">
+              <input className="input !w-48" value={label} onChange={(e) => setLabel(e.target.value)} aria-label={l("Label token", "Token label")} />
+              <button className={`btn ${created ? "" : "btn-primary"}`} onClick={createToken} disabled={loading}>
+                <KeyRound size={16} />
+                {loading ? l("Membuat…", "Generating…") : created ? l("Buat token lain", "Generate another") : l("Buat token", "Generate token")}
               </button>
             </div>
-            <pre className="bg-surface2 p-3.5 rounded-erp text-xs whitespace-pre-wrap border border-line max-h-56 overflow-y-auto">{info.instructions}</pre>
-          </div>
-        )}
+            {err && <p role="alert" className="text-bad text-sm">{err}</p>}
+            {created && (
+              <div className="p-3 bg-ok/10 border border-ok/30 rounded-erp text-xs text-ok">
+                {l("Token hanya ditampilkan satu kali. Salin konfigurasinya sekarang (langkah 2).", "The token is shown only once. Copy the config now (step 2).")}
+              </div>
+            )}
+          </Step>
+
+          <Step n={2} title={l("Salin konfigurasi MCP", "Copy the MCP config")}>
+            <pre className={`bg-surface2 p-3.5 rounded-erp text-xs font-mono overflow-x-auto border border-line ${created ? "" : "opacity-60"}`}>{cfg}</pre>
+            <div>
+              {created
+                ? copyBtn(cfg, "cfg", l("Salin konfigurasi", "Copy config"), true)
+                : <p className="text-xs text-muted">{l("Buat token dulu di langkah 1; konfigurasi berisi token Anda.", "Generate a token in step 1 first; the config contains your token.")}</p>}
+            </div>
+          </Step>
+
+          <Step n={3} title={l("Tambahkan konektor di WorkBuddy", "Add the connector in WorkBuddy")}>
+            <ol className="list-decimal pl-5 flex flex-col gap-2 text-sm">
+              <li>{l("Buka WorkBuddy, lalu ke", "Open WorkBuddy and go to")} <MenuPath items={["Connectors", "Custom connectors", "+ Add MCP"]} /></li>
+              <li>{l("Tempel konfigurasi dari langkah 2.", "Paste the config from step 2.")}</li>
+              <li>{l("Klik", "Click")} <MenuPath items={["Save"]} />. {l("Konektor", "The connector")} <code className="text-xs">workplace-brain</code> {l("akan muncul di daftar.", "appears in the list.")}</li>
+            </ol>
+          </Step>
+
+          <Step n={4} title={l("Buat expert Knowhaven", "Create the Knowhaven expert")}>
+            <ol className="list-decimal pl-5 flex flex-col gap-2 text-sm">
+              <li>{l("Salin instruksi expert di bawah.", "Copy the expert instructions below.")}</li>
+              <li>{l("Di WorkBuddy, buka", "In WorkBuddy, open")} <MenuPath items={["Experts", "My Experts", "+ Create Expert"]} /></li>
+              <li>
+                {l("Di kotak chat, hapus teks contoh (placeholder), tapi", "In the chat box, delete the placeholder text, but")}{" "}
+                <b>{l("jangan hapus perintah", "keep the")} <code className="text-xs">expert-manager</code></b>{l(" di awal.", " command at the start.")}
+              </li>
+              <li>{l("Tempel instruksi setelah perintah itu, lalu kirim.", "Paste the instructions after that command, then send.")}</li>
+            </ol>
+            {info && (
+              <>
+                <pre className="bg-surface2 p-3.5 rounded-erp text-xs whitespace-pre-wrap border border-line max-h-64 overflow-y-auto">{info.instructions}</pre>
+                <div>{copyBtn(info.instructions, "ins", l("Salin instruksi expert", "Copy expert instructions"), !!created)}</div>
+              </>
+            )}
+          </Step>
+
+          <Step n={5} title={l("Coba tanya", "Try it")}>
+            <p className="text-sm text-muted flex gap-2">
+              <Info size={16} className="shrink-0 mt-0.5" />
+              <span>
+                {l("Pilih expert Knowhaven, lalu tanya misalnya", "Pick the Knowhaven expert and ask, for example,")}{" "}
+                <i>&ldquo;{l("Bagaimana cara mengajukan cuti?", "How do I request leave?")}&rdquo;</i>.{" "}
+                {l("Jawaban datang dengan sitasi yang sama seperti di Knowhaven.", "Answers come with the same citations as in Knowhaven.")}
+              </span>
+            </p>
+          </Step>
+        </ol>
 
         {tokens.length > 0 && (
-          <div className="mt-4 pt-4 border-t border-line">
+          <div className="pt-4 border-t border-line">
             <h3 className="font-semibold text-sm mb-2">{l("Token Anda", "Your tokens")}</h3>
             <div className="flex flex-col gap-2">
               {tokens.map((tk) => (

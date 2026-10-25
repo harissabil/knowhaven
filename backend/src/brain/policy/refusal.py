@@ -29,6 +29,14 @@ _WRITE = re.compile(
     r"pesan|message|slack|data|dokumen|document|akses|access|permintaan|request)\b"
 )
 
+# A question asking for information is not a write request, even when it names a write as its
+# purpose ("Untuk update data BPJS, berapa NIK X?"). Real requests ("Tolong ubah SOP ...") have no
+# question word; ambiguous ones still reach the model's action_request check.
+_INFO_QUESTION = re.compile(
+    r"(?i)\b(?:berapa|siapa|kapan|apa(?:kah)?|bagaimana|gimana|di ?mana|mana|kenapa|mengapa|"
+    r"what|who|when|where|which|why|how)\b"
+)
+
 PERSONAL_COMPENSATION = "personal_compensation"
 WRITE_ACTION = "write_action"
 
@@ -67,7 +75,7 @@ def check(
 ) -> Refusal | None:
     if (llm_says_person_pay or _names(question)) and "hr" not in role_keys:
         return Refusal(PERSONAL_COMPENSATION)
-    if _WRITE.search(question):
+    if _WRITE.search(question) and not _INFO_QUESTION.search(question):
         return Refusal(WRITE_ACTION)
     return None
 

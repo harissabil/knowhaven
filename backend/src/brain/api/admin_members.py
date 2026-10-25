@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, select, update
 
 from brain.api.deps import Admin
@@ -13,8 +13,9 @@ from brain.audit import log as audit
 from brain.config import get_settings
 from brain.db.models import Invite, MemberProfile, Membership, Role, Tenant, User, UserRole
 from brain.db.session import global_session, tenant_session
+from brain.ingestion.remask import remask
 from brain.security import decrypt
-from brain.tenancy import service
+from brain.tenancy import domains, service
 from brain.tenancy.service import TenancyError
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -236,6 +237,24 @@ class TenantSettingsIn(BaseModel):
     default_contact: str | None = Field(default=None, min_length=1, max_length=200)
     # Public company facts (founded, address, what the company does...). Visible to every member.
     profile: str | None = Field(default=None, max_length=4000)
+    # Extra company mail domains (e.g. the one used in Confluence): never masked as personal email.
+    email_domains: list[str] | None = Field(default=None, max_length=20)
+
+    @field_validator("email_domains")
+    @classmethod
+    def _domains(cls, v):
+        if v is None:
+            return v
+        out = []
+        for d in v:
+            d = d.strip().lower().lstrip("@")
+            if not domains.DOMAIN.match(d):
+                raise ValueError(f"invalid domain: {d!r}")
+            if d in domains.FREE_MAIL:
+                raise ValueError(f"{d} is a public mail provider, not a company domain")
+            if d not in out:
+                out.append(d)
+        return out
 
 
 class TenantSettingsOut(BaseModel):
@@ -243,15 +262,24 @@ class TenantSettingsOut(BaseModel):
     slug: str
     default_contact: str | None
     profile: str | None
+    email_domains: list[str] = []
+
+
+def _settings_out(t: Tenant) -> TenantSettingsOut:
+    return TenantSettingsOut(
+        name=t.name,
+        slug=t.slug,
+        default_contact=t.default_contact,
+        profile=t.profile,
+        email_domains=list(t.email_domains or []),
+    )
 
 
 @router.get("/tenant")
 async def get_tenant_settings(ctx: Admin) -> TenantSettingsOut:
     async with tenant_session(ctx.tenant_id) as s:
         t = await s.scalar(select(Tenant))
-    return TenantSettingsOut(
-        name=t.name, slug=t.slug, default_contact=t.default_contact, profile=t.profile
-    )
+    return _settings_out(t)
 
 
 @router.patch("/tenant")
@@ -261,7 +289,8 @@ async def update_tenant_settings(body: TenantSettingsIn, ctx: Admin) -> TenantSe
         t = await s.scalar(select(Tenant))
         for k, v in changes.items():
             setattr(t, k, v)
+        if {"email_domains", "default_contact"} & changes.keys():
+            await s.flush()
+            await remask(s)  # work addresses on a new company domain are no longer masked
         await audit.admin_event(s, ctx, "tenant.update", fields=sorted(changes))
-    return TenantSettingsOut(
-        name=t.name, slug=t.slug, default_contact=t.default_contact, profile=t.profile
-    )
+    return _settings_out(t)

@@ -147,6 +147,20 @@ class Retriever:
             )  # fmt: skip
         return self._record("search_documents", {"query": query, "entities": entities}, res, t)
 
+    async def search_tasks(
+        self, query: str, entities: list[str] | None = None, limit: int = 4
+    ) -> SearchResult:
+        """Free-text search over tasks (Jira titles, descriptions, comments), for questions that
+        don't say "ticket" but whose answer is the state of some work ("sudah diurus belum?")."""
+        t = time.monotonic()
+        qv = await self._vector(query)
+        async with tenant_session(self.ctx.tenant_id) as s:
+            res = await search.hybrid_search(
+                s, self.ctx, query, types=("task",), query_vector=qv, entities=entities or (),
+                limit=min(limit, 10), policy=self.policy,
+            )  # fmt: skip
+        return self._record("search_tasks", {"query": query, "entities": entities}, res, t)
+
     async def query_tasks(
         self,
         project: str | None = None,

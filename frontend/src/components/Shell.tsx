@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { MessageSquare, CheckSquare, Users, Shield, Plug, Upload, ScrollText, FlaskConical, LogOut, Settings, FolderOpen, UserPlus, UserCog, User, ChevronDown, BookOpen, EyeOff, Building2 } from "lucide-react";
+import { MessageSquare, CheckSquare, Users, Shield, Plug, Upload, ScrollText, FlaskConical, LogOut, Settings, FolderOpen, UserPlus, UserCog, User, ChevronDown, BookOpen, EyeOff, Building2, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useSession, usePersona, useTenants } from "@/store/session";
 import { can, NAV, NAV_SECTIONS } from "@/lib/permissions";
 import { motion } from "framer-motion";
@@ -50,27 +50,40 @@ export function Shell({ children, title, fullBleed }: { children: React.ReactNod
   const sel = "input !w-auto";
   const SECTION_LABEL = { daily: l("Pekerjaan harian", "Daily work"), manage: l("Kelola perusahaan", "Manage company"), monitor: l("Pemantauan", "Monitoring"), account: l("Akun saya", "My account") };
   const wizard = path.startsWith("/admin/setup");
+  const collapsed = s.navCollapsed;
   const guard = NAV.find((n) => path.startsWith(n.href));
   const allowed = !guard?.cap || can(roles, guard.cap, canApprove);
 
   return (
     <div className={`flex ${fullBleed ? "h-screen overflow-hidden" : "min-h-screen"}`}>
-      {!wizard && <aside className="w-64 shrink-0 border-r border-line bg-surface p-4 hidden md:flex flex-col gap-1 sticky top-0 h-screen overflow-y-auto">
-        <Link href="/" className="flex items-center gap-2.5 mb-5 font-semibold text-lg tracking-tight">
-          <KnowhavenLogo size={28} /> Knowhaven
-        </Link>
-        {NAV_SECTIONS.map((sec) => {
+      {!wizard && <aside className={`${collapsed ? "w-[4.5rem] px-2.5" : "w-64 px-4"} py-4 shrink-0 border-r border-line bg-surface hidden md:flex flex-col gap-1 sticky top-0 h-screen overflow-y-auto overflow-x-hidden transition-[width] duration-200`}>
+        <div className={`flex items-center mb-5 ${collapsed ? "flex-col gap-3" : "gap-2"}`}>
+          <Link href="/" className="flex items-center gap-2.5 font-semibold text-lg tracking-tight flex-1 min-w-0" title="Knowhaven" aria-label="Knowhaven">
+            <KnowhavenLogo size={28} /> {!collapsed && "Knowhaven"}
+          </Link>
+          <button className="p-1.5 rounded-lg text-muted hover:bg-surface2 hover:text-fg transition-colors"
+            onClick={() => s.set({ navCollapsed: !collapsed })}
+            aria-label={collapsed ? l("Buka sidebar", "Expand sidebar") : l("Ciutkan sidebar", "Collapse sidebar")}
+            title={collapsed ? l("Buka sidebar", "Expand sidebar") : l("Ciutkan sidebar", "Collapse sidebar")}>
+            {collapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+          </button>
+        </div>
+        {NAV_SECTIONS.map((sec, i) => {
           const group = items.filter((n) => n.section === sec);
           if (!group.length) return null;
           return (
             <div key={sec} className="mt-3 first:mt-0 flex flex-col gap-1" role="group" aria-label={SECTION_LABEL[sec]}>
-              <div className="px-3.5 pb-0.5 text-[0.7rem] font-semibold uppercase tracking-wider text-muted/70">{SECTION_LABEL[sec]}</div>
+              {collapsed
+                ? i > 0 && <div className="mx-2 mb-1 border-t border-line" aria-hidden />
+                : <div className="px-3.5 pb-0.5 text-[0.7rem] font-semibold uppercase tracking-wider text-muted/70">{SECTION_LABEL[sec]}</div>}
               {group.map((n) => {
                 const active = n.href === "/settings" ? path === "/settings" : path.startsWith(n.href);
+                const label = t(n.id as Key);
                 return (
                   <Link key={n.id} href={n.href} aria-current={active ? "page" : undefined}
-                    className={`flex items-center gap-2.5 px-3.5 py-2 rounded-full text-[0.95rem] transition-colors ${active ? "bg-tint text-brand font-medium" : "text-muted hover:bg-surface2 hover:text-fg"}`}>
-                    {ICON[n.id]} {t(n.id as Key)}
+                    title={collapsed ? label : undefined} aria-label={collapsed ? label : undefined}
+                    className={`flex items-center gap-2.5 py-2 rounded-full text-[0.95rem] transition-colors ${collapsed ? "justify-center px-0" : "px-3.5"} ${active ? "bg-tint text-brand font-medium" : "text-muted hover:bg-surface2 hover:text-fg"}`}>
+                    {ICON[n.id]} {!collapsed && label}
                   </Link>
                 );
               })}

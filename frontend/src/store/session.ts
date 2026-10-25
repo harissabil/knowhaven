@@ -65,6 +65,8 @@ interface State {
   theme: "light" | "dark";
   lang: "id" | "en";
   fontScale: number;
+  /** Main sidebar shows icons only. */
+  navCollapsed: boolean;
   wizards: Record<string, Wizard>;
   /** Active chat conversation per tenant during this session ("new" = fresh chat, null/undefined = latest). */
   activeConversations: Record<string, string | null>;
@@ -79,7 +81,7 @@ interface State {
   createCompany: (name: string, industry?: string, industryKey?: string, industryOther?: string) => Promise<{ tenantId: string; joinCode: string }>;
   /** POST /api/tenants/join-code: membership starts pending until an admin approves. */
   joinByCode: (code: string) => Promise<{ tenantId: string; status: string }>;
-  set: (p: Partial<Pick<State, "theme" | "lang" | "fontScale">>) => void;
+  set: (p: Partial<Pick<State, "theme" | "lang" | "fontScale" | "navCollapsed">>) => void;
   patchWizard: (tenantId: string, p: Partial<Wizard>) => void;
   setActiveConversation: (tenantId: string, convId: string | null) => void;
 }
@@ -92,6 +94,7 @@ export const useSession = create<State>()(
       theme: "light",
       lang: "id",
       fontScale: 1,
+      navCollapsed: false,
       wizards: {},
       activeConversations: {},
       applyMe: (me) => {
@@ -169,7 +172,7 @@ export const useSession = create<State>()(
       migrate: () => ({}) as State,
       partialize: (s) => ({
         currentUser: s.currentUser, tenantId: s.tenantId, theme: s.theme, lang: s.lang,
-        fontScale: s.fontScale, wizards: s.wizards, activeConversations: s.activeConversations,
+        fontScale: s.fontScale, navCollapsed: s.navCollapsed, wizards: s.wizards, activeConversations: s.activeConversations,
       }),
     },
   ),

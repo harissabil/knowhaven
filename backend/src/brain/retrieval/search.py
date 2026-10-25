@@ -23,12 +23,12 @@ from sqlalchemy import (
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from brain.db.models import Chunk, Container, Membership, PiiPermission, SourceItem, User
+from brain.db.models import Chunk, Container, PiiPermission, SourceItem
 from brain.ingestion import pii
-from brain.ingestion.pipeline import FREE_MAIL
 from brain.rbac.context import RequestContext
 from brain.rbac.visibility import visible_item_clause
 from brain.retrieval.expansion import lexical_terms, name_terms, tsquery
+from brain.tenancy import domains as company_domains
 
 RRF_K = 60
 LEG_LIMIT = 40
@@ -82,12 +82,7 @@ NO_PII = PiiPolicy()
 async def pii_policy(s: AsyncSession, ctx: RequestContext, needs_pii: bool) -> PiiPolicy:
     """Raw PII only if the question needs it (step 2) AND a business role has the permission.
     Company email domains are always loaded: work addresses aren't personal data (11.4)."""
-    emails = await s.scalars(
-        select(User.email)
-        .join(Membership, Membership.user_id == User.id)
-        .where(Membership.status == "active")
-    )
-    domains = frozenset(e.split("@")[1].lower() for e in emails) - FREE_MAIL
+    domains = await company_domains.for_tenant(s)
     if not needs_pii or not ctx.business_role_ids:
         return PiiPolicy(frozenset(), domains)
     allowed = frozenset(

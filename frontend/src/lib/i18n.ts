@@ -5,7 +5,7 @@ const D = {
   id: {
     chat: "Tanya Havi", approvals: "Persetujuan", company: "Pengaturan Perusahaan", members: "Anggota", containers: "Container & Izin",
     documents: "Dokumen", integrations: "Integrasi", managers: "Approver", topics: "Pemilik Topik", pii: "Izin Data Pribadi", invites: "Undangan", upload: "Upload Data", audit: "Audit Log", tests: "Uji Sistem",
-    workbuddy: "Hubungkan WorkBuddy", logout: "Keluar", send: "Kirim", placeholder: "Tulis pertanyaan… (ID / EN / campur)",
+    workbuddy: "Hubungkan WorkBuddy", logout: "Keluar", send: "Kirim", placeholder: "Tulis pertanyaan",
     dataAsOf: "Data per", sources: "Sumber", trace: "Jejak proses", approve: "Setujui", reject: "Tolak",
     requestAccess: "Ajukan akses", login: "Masuk", demoAccounts: "Akun demo (untuk juri)",
     dark: "Gelap", light: "Terang", tenant: "Perusahaan", settings: "Pengaturan",
@@ -15,7 +15,7 @@ const D = {
   en: {
     chat: "Ask Havi", approvals: "Approvals", company: "Company Settings", members: "Members", containers: "Containers & Access",
     documents: "Documents", integrations: "Integrations", managers: "Approvers", topics: "Topic Owners", pii: "PII Access", invites: "Invites", upload: "Upload Data", audit: "Audit Log", tests: "System Tests",
-    workbuddy: "Connect WorkBuddy", logout: "Log out", send: "Send", placeholder: "Type a question… (ID / EN / mixed)",
+    workbuddy: "Connect WorkBuddy", logout: "Log out", send: "Send", placeholder: "Type a question",
     dataAsOf: "Data as of", sources: "Sources", trace: "Process trace", approve: "Approve", reject: "Reject",
     requestAccess: "Request access", login: "Sign in", demoAccounts: "Demo accounts (for judges)",
     dark: "Dark", light: "Light", tenant: "Company", settings: "Settings",

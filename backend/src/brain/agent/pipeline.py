@@ -317,6 +317,15 @@ class _Run:
                 yield e
             yield await self._finish(NOTES["smalltalk"][lang], "answer", [], [], None, [])
             return
+        if und.category == "unclear" and (und.clarifying_question or "").strip():
+            # Asked back before any retrieval: the question comes from the user's words alone, so it
+            # can't reveal data (a hidden project is never named in it).
+            yield self._end(st, "Pertanyaan perlu diperjelas")
+            for e in self._skip_steps(4, 7):
+                yield e
+            text = und.clarifying_question.strip()[:300]
+            yield await self._finish(text, "answer", [], [], None, [])
+            return
         yield self._end(st, "Lolos pemeriksaan kebijakan")
 
         # 4 [LLM+CODE] retrieve -----------------------------------------------------------------------
@@ -520,11 +529,20 @@ class _Run:
         jobs = []
         for doc_id in self.document_ids:
             jobs.append(r.get_item(doc_id))
-        for query in queries[:2]:
-            if "chat" in types:
-                jobs.append(r.search_messages(query, und.entities or None, limit=6))
-            if "doc" in types:
-                jobs.append(r.search_documents(query, und.entities or None, limit=5))
+        # Every source type is always searched: the model's source_types only adds the structured
+        # task query. A policy question must still see chat (an HR announcement can override the
+        # SOP, 11.3) and a "has it been done?" question must still see Jira.
+        for i, query in enumerate(queries[:2]):
+            jobs.append(
+                r.search_messages(query, und.entities or None, limit=6 if "chat" in types else 4)
+            )
+            jobs.append(
+                r.search_documents(query, und.entities or None, limit=5 if "doc" in types else 3)
+            )
+            if i == 0:
+                jobs.append(
+                    r.search_tasks(query, und.entities or None, limit=4 if "task" in types else 3)
+                )
         if "task" in types:
             tf = und.task_filters
             jobs.append(r.query_tasks(tf.project, tf.status, tf.assignee, tf.entity or (und.entities[0] if und.entities else None))

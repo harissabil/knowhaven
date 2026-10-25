@@ -123,6 +123,9 @@ class Tenant(Base):
     default_contact: Mapped[str | None] = mapped_column(Text)
     # Company facts every active member may know (name is always known); cited as COMPANY-profile.
     profile: Mapped[str | None] = mapped_column(Text)
+    # The company's own mail domains besides members' (e.g. the one its Confluence uses): addresses
+    # on them are work contacts and stay unmasked (11.4).
+    email_domains: Mapped[list[str]] = mapped_column(ARRAY(Text), server_default="{}")
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
     )

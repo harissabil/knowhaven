@@ -3,6 +3,12 @@
     uv run brain-seed                       # srn + klm on the linked Neon branch
     uv run brain-seed --tenants srn --no-llm-extract
     uv run brain-seed --allow-production    # required when NEON_BRANCH=production
+    uv run brain-seed --append srn --chat-since 2026-10-20   # add to a live tenant, no reset
+
+--append never deletes anything: it adds manifest users who aren't members yet (with their roles
+and profile) and ingests seed chat messages from --chat-since on into the channels the tenant
+already has, matched by channel name (live Slack channel ids differ from the seed's). Use it on a
+tenant whose integrations are connected, where a reset would drop them.
 
 Everything goes through the real code paths: tenancy service, RBAC tables, and the ingestion
 pipeline (Slack/Jira content is authored in compact JSON and expanded to the connectors' native
@@ -103,6 +109,7 @@ async def _build_tenant(manifest: dict, users: dict[str, uuid.UUID]) -> tuple[uu
         await service.create_tenant(s, tenant_id, t["name"], owner, slug=t["slug"])
         tenant = await s.scalar(select(Tenant))
         tenant.default_contact = manifest.get("default_contact")
+        tenant.email_domains = manifest.get("email_domains", [])
         s.add_all(
             Role(tenant_id=tenant_id, key=r["key"], name=r["name"]) for r in manifest["extra_roles"]
         )
@@ -273,6 +280,69 @@ async def seed_tenant(slug: str, ingestor: Ingestor) -> dict:
     }  # fmt: skip
 
 
+async def _tenant_id(manifest: dict) -> uuid.UUID:
+    owner, slug = manifest["tenant"]["owner"], manifest["tenant"]["slug"]
+    async with global_session() as s:
+        row = (await s.execute(text(
+            "SELECT m.tenant_id FROM users u, LATERAL list_my_memberships(u.id) m "
+            "WHERE lower(u.email) = lower(:e) AND m.tenant_slug = :t AND m.status = 'active'"),
+            {"e": owner, "t": slug})).one_or_none()  # fmt: skip
+    if row is None:
+        raise SystemExit(f"tenant '{slug}' not found (owner {owner})")
+    return row.tenant_id
+
+
+async def append_tenant(slug: str, ingestor: Ingestor, chat_since: datetime | None) -> dict:
+    """Add new manifest members and recent seed chat to an existing tenant (see module doc)."""
+    root, manifest = _load(slug)
+    users = await _ensure_users(manifest)
+    tenant_id = await _tenant_id(manifest)
+    added = []
+    async with tenant_session(tenant_id) as s:
+        roles = {r.key: r for r in await s.scalars(select(Role))}
+        members = set(await s.scalars(select(Membership.user_id)))
+        for u in manifest["users"]:
+            uid = users[u["email"]]
+            if uid in members:
+                continue
+            s.add(Membership(tenant_id=tenant_id, user_id=uid, status="active"))
+            await s.flush()
+            s.add(MemberProfile(
+                tenant_id=tenant_id, user_id=uid, department=u.get("department"), title=u.get("title"),
+                branch_office=u.get("branch"), slack_user_id=u.get("slack"),
+                display_aliases=u.get("aliases", []),
+            ))  # fmt: skip
+            s.add_all(
+                UserRole(tenant_id=tenant_id, user_id=uid, role_id=roles[k].id) for k in u["roles"]
+            )
+            added.append(u["email"])
+        if added:
+            await bump_permission_version(s, tenant_id)
+        channels = {
+            c.name: c.external_id
+            for c in await s.scalars(select(Container).where(Container.source == "slack_channel"))
+        }
+    items = []
+    if chat_since is not None:
+        data = json.loads((root / manifest["slack"]).read_text(encoding="utf-8"))
+        names = {x["id"]: x["name"] for x in data["users"]}
+        for ch in data["channels"]:
+            if ch["name"] not in channels:
+                continue
+            ext = channels[ch["name"]]
+            for msg in ch["messages"]:
+                at = datetime.fromisoformat(msg["at"])
+                if at < chat_since or "reply_to" in msg:
+                    continue
+                raw = {"type": "message", "user": msg["user"], "text": msg["text"],
+                       "ts": f"{at.timestamp():.6f}"}  # fmt: skip
+                if item := slack.message_to_item(raw, ext, ch["name"], names):
+                    items.append(item)
+    report = await ingestor.ingest(tenant_id, items) if items else None
+    return {"tenant": manifest["tenant"]["name"], "members_added": added,
+            "chat_items": len(items), "created": report.created if report else 0}  # fmt: skip
+
+
 async def run(slugs: list[str], llm_extract: bool) -> None:
     await reset(slugs)
     ingestor = Ingestor(extractor=LlmExtractor() if llm_extract else DictionaryExtractor())
@@ -289,7 +359,26 @@ def main() -> None:
         "--no-llm-extract", action="store_true", help="dictionary topic/entity extraction only"
     )
     p.add_argument("--allow-production", action="store_true")
+    p.add_argument(
+        "--append", nargs="+", metavar="TENANT", help="add to existing tenants, no reset"
+    )
+    p.add_argument("--chat-since", type=datetime.fromisoformat, default=None,
+                   help="with --append: also ingest seed chat messages from this time on")  # fmt: skip
     args = p.parse_args()
+    if args.append:
+        ingestor = Ingestor(
+            extractor=DictionaryExtractor() if args.no_llm_extract else LlmExtractor()
+        )
+        since = args.chat_since
+        if since is not None and since.tzinfo is None:
+            since = since.replace(tzinfo=datetime.now().astimezone().tzinfo)
+
+        async def go():
+            for slug in args.append:
+                print(json.dumps(await append_tenant(slug, ingestor, since), ensure_ascii=False))
+
+        asyncio.run(go())
+        return
     branch = os.environ.get("NEON_BRANCH") or _env_branch()
     if branch == "production" and not args.allow_production:
         raise SystemExit(
