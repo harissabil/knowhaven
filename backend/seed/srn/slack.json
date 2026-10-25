@@ -6,6 +6,8 @@
     {"id": "U0RINA", "name": "Rina Wulandari", "email": "rina@srn-demo.id"},
     {"id": "U0ANDI", "name": "Andi Saputra", "email": "andi@srn-demo.id"},
     {"id": "U0SARI", "name": "Sari Kusuma", "email": "sari@srn-demo.id"},
+    {"id": "U0BAMBANG", "name": "Bambang Sutrisno", "email": "bambang@srn-demo.id"},
+    {"id": "U0RIZKY", "name": "Rizky Firmansyah"},
     {"id": "U0BUDIH", "name": "Budi Hartono", "email": "budi.hartono@srn-demo.id"},
     {"id": "U0BUDIS", "name": "Budi Santoso", "email": "budi.santoso@srn-demo.id"},
     {"id": "U0LINA", "name": "Lina Marpaung", "email": "lina@srn-demo.id"},
@@ -19,7 +21,9 @@
       {"user": "U0DIMAS", "at": "2026-09-02T09:41:00+07:00", "reply_to": 1, "text": "Mantap bu! Ini berlaku juga utk karyawan yg masih probation?"},
       {"user": "U0SARI", "at": "2026-09-02T09:55:00+07:00", "reply_to": 1, "text": "Berlaku untuk semua karyawan aktif termasuk masa probation, dihitung prorata sejak tanggal bergabung."},
       {"user": "U0SARI", "at": "2026-09-15T08:00:00+07:00", "text": "Reminder: batas pengajuan klaim reimbursement bulan Agustus adalah tanggal 20 September 2026 ya."},
-      {"user": "U0SARI", "at": "2026-10-01T10:00:00+07:00", "text": "Info lembur: mulai Oktober 2026 uang makan lembur menjadi Rp40.000 per hari lembur (minimal 3 jam). — HR"}
+      {"user": "U0SARI", "at": "2026-10-01T10:00:00+07:00", "text": "Info lembur: mulai Oktober 2026 uang makan lembur menjadi Rp40.000 per hari lembur (minimal 3 jam). — HR"},
+      {"user": "U0SARI", "at": "2026-10-21T09:00:00+07:00", "text": "📢 Pengumuman kerja fleksibel: mulai 1 November 2026 sampai audit tahunan selesai (31 Desember 2026), kuota WFH sementara menjadi maksimal 1 hari per minggu (sebelumnya 2 hari per minggu di Kebijakan Kerja Fleksibel). Pengajuan tetap lewat HRIS paling lambat H-1 dan disetujui atasan langsung."},
+      {"user": "U0SARI", "at": "2026-10-22T10:30:00+07:00", "text": "Info payroll: karena 25 Oktober 2026 jatuh pada hari Minggu, gaji Oktober dibayarkan lebih awal pada Jumat, 23 Oktober 2026. Klaim reimbursement yang masuk setelah cut-off 20 Oktober akan dibayar bersama gaji November."}
     ]},
     {"id": "C0GENERAL", "name": "general", "messages": [
       {"user": "U0SRNADMIN", "at": "2026-08-01T08:00:00+07:00", "text": "Halo semua, ini channel umum SRN. Pengumuman resmi HR ada di #pengumuman-hr ya."},
@@ -28,11 +32,14 @@
       {"user": "U0YOGA", "at": "2026-09-12T12:10:00+07:00", "reply_to": 2, "text": "lagi diganti tonernya mas, coba yg di lt 2 dulu"},
       {"user": "U0BUDIS", "at": "2026-09-25T16:20:00+07:00", "text": "eh katanya uang bensin mau naik lagi jadi 1 juta ya? 😂 ada yg denger?"},
       {"user": "U0DIMAS", "at": "2026-09-25T16:24:00+07:00", "reply_to": 4, "text": "wkwk blm denger sih, yg terakhir kan 750rb"},
-      {"user": "U0LINA", "at": "2026-10-06T09:00:00+07:00", "text": "Reminder audit internal kuartal 3 mulai 20 Okt. Mohon dokumen pendukung klaim disiapkan."}
+      {"user": "U0LINA", "at": "2026-10-06T09:00:00+07:00", "text": "Reminder audit internal kuartal 3 mulai 20 Okt. Mohon dokumen pendukung klaim disiapkan."},
+      {"user": "U0RIZKY", "at": "2026-10-23T08:15:00+07:00", "text": "⚠️ Waspada phishing: ada email palsu mengatasnamakan HRD (hrd-sinarrantai@gmail.com) yang meminta karyawan memperbarui nomor rekening gaji lewat tautan. Itu BUKAN dari HR. Jangan klik tautannya; teruskan email tersebut ke it-support@sinarrantai.example lalu hapus. HR tidak pernah meminta data rekening lewat email."},
+      {"user": "U0BAMBANG", "at": "2026-10-24T16:00:00+07:00", "text": "Terima kasih untuk kerja keras tim di kuartal III. Town hall kuartal IV akan diadakan Jumat, 12 Desember 2026 pukul 14.00 di kantor pusat Jakarta dan lewat Zoom untuk cabang. Agenda: kinerja Q4, rencana 2027, dan sesi tanya jawab."}
     ]},
     {"id": "C0OPSNAS", "name": "ops-nasional", "messages": [
       {"user": "U0BUDIH", "at": "2026-09-30T10:00:00+07:00", "text": "Rekap Q3: on-time delivery nasional 92%, Makassar paling rendah (78%) karena jadwal kapal. Q4 fokus perbaikan rute timur."},
-      {"user": "U0RINA", "at": "2026-10-14T11:00:00+07:00", "text": "FYI tim, cabang Makassar lagi ada keterlambatan stok minyak goreng & gula, detail di #ops-makassar"}
+      {"user": "U0RINA", "at": "2026-10-14T11:00:00+07:00", "text": "FYI tim, cabang Makassar lagi ada keterlambatan stok minyak goreng & gula, detail di #ops-makassar"},
+      {"user": "U0BUDIH", "at": "2026-10-24T11:00:00+07:00", "text": "Reminder stock opname bulanan Oktober: dilaksanakan Kamis-Jumat, 30-31 Oktober 2026 di semua gudang. Penerimaan barang ditutup Kamis 30 Oktober mulai pukul 12.00 dan dibuka lagi Sabtu pagi. Kepala gudang kirim hasil hitung ke saya paling lambat Senin 3 November."}
     ]},
     {"id": "C0OPSMKS", "name": "ops-makassar", "messages": [
       {"user": "U0RINA", "at": "2026-10-14T08:15:00+07:00", "text": "Pak, stok minyak goreng & gula utk Makassar telat lagi 😩 kapal dari Surabaya ketahan krn cuaca buruk di Selat Makassar, ETA mundur 3 hari"},

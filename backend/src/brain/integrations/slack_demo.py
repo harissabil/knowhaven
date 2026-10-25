@@ -10,6 +10,8 @@ HR announcement) arrive through the Events API as usual.
 
 Needs the bot scopes channels:manage (create), chat:write and chat:write.customize (persona names).
 Running it again skips channels already posted (recorded in the integration's metadata).
+With --since, only messages from that time on are posted (for history added to the seed later,
+after `brain-seed --append ... --chat-since` imported them), whether or not the channel was posted.
 """
 
 import argparse
@@ -61,7 +63,9 @@ async def post_history(token: str, channel_id: str, channel: dict, people: dict[
     return len(posted)
 
 
-async def run(admin_email: str, tenant_slug: str, names: list[str], seed: Path) -> None:
+async def run(
+    admin_email: str, tenant_slug: str, names: list[str], seed: Path, since: datetime | None = None
+) -> None:
     async with global_session() as s:
         row = (await s.execute(text(
             "SELECT m.tenant_id FROM users u, LATERAL list_my_memberships(u.id) m "
@@ -83,6 +87,12 @@ async def run(admin_email: str, tenant_slug: str, names: list[str], seed: Path) 
         ch = next((c for c in data["channels"] if c["name"] == name), None)
         cid, created = await ensure_channel(token, name)
         print(f"#{name}: {'created' if created else 'exists'} ({cid})")
+        if ch is not None and since is not None:
+            recent = [m for m in ch["messages"]
+                      if datetime.fromisoformat(m["at"]) >= since and "reply_to" not in m]  # fmt: skip
+            n = await post_history(token, cid, {**ch, "messages": recent}, people)
+            print(f"   posted {n} messages since {since.isoformat()}")
+            continue
         if ch is None or name in done:
             print(f"   history: {'already posted' if name in done else 'none in seed'}")
             continue
@@ -104,9 +114,8 @@ def main() -> None:
     p.add_argument("--tenant", default="srn")
     p.add_argument("--channels", default="pengumuman-hr,general")
     p.add_argument("--seed", default="seed", help="folder with <tenant>/slack.json")
+    p.add_argument("--since", type=datetime.fromisoformat, default=None,
+                   help="post only messages from this time on (ISO, with timezone)")  # fmt: skip
     a = p.parse_args()
-    asyncio.run(
-        run(
-            a.admin, a.tenant, [c.strip() for c in a.channels.split(",") if c.strip()], Path(a.seed)
-        )
-    )
+    channels = [c.strip() for c in a.channels.split(",") if c.strip()]
+    asyncio.run(run(a.admin, a.tenant, channels, Path(a.seed), a.since))
