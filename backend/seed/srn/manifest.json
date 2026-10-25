@@ -58,20 +58,26 @@
   "topics": [
     {"key": "uang_bensin", "display_name": "Uang bensin", "owner": "sari@srn-demo.id", "tier": "open",
      "aliases": ["tunjangan transport", "fuel allowance", "bensin", "transport allowance"],
-     "fallback_contact": "HR Helpdesk (hr@srn-demo.id)"},
+     "fallback_contact": "HR Helpdesk (hr-helpdesk@sinarrantai.example)"},
     {"key": "uang_makan_lembur", "display_name": "Uang makan lembur", "owner": "sari@srn-demo.id", "tier": "open",
-     "aliases": ["lembur", "overtime meal", "uang makan"], "fallback_contact": "HR Helpdesk (hr@srn-demo.id)"},
+     "aliases": ["lembur", "overtime meal", "uang makan"], "fallback_contact": "HR Helpdesk (hr-helpdesk@sinarrantai.example)"},
     {"key": "cuti", "display_name": "Cuti tahunan", "owner": "sari@srn-demo.id", "tier": "open",
-     "aliases": ["annual leave", "leave", "cuti tahunan", "probation"], "fallback_contact": "HR Helpdesk (hr@srn-demo.id)"},
+     "aliases": ["annual leave", "leave", "cuti tahunan", "probation"], "fallback_contact": "HR Helpdesk (hr-helpdesk@sinarrantai.example)"},
     {"key": "pelatihan", "display_name": "Pelatihan & pengembangan", "owner": "sari@srn-demo.id", "tier": "open",
-     "aliases": ["training", "beasiswa", "kursus", "sertifikasi", "scholarship"], "fallback_contact": "HR Helpdesk (hr@srn-demo.id)"},
+     "aliases": ["training", "beasiswa", "kursus", "sertifikasi", "scholarship"], "fallback_contact": "HR Helpdesk (hr-helpdesk@sinarrantai.example)"},
     {"key": "grade_gaji", "display_name": "Tabel grade gaji per level", "owner": "sari@srn-demo.id", "tier": "gated",
      "container": "space-fin", "aliases": ["grade gaji", "salary grade", "tabel gaji", "gaji level", "pay grade"],
-     "fallback_contact": "HR Helpdesk (hr@srn-demo.id)"},
+     "fallback_contact": "HR Helpdesk (hr-helpdesk@sinarrantai.example)"},
     {"key": "kewenangan_approval", "display_name": "Matriks kewenangan approval", "owner": "budi.santoso@srn-demo.id", "tier": "open",
-     "aliases": ["approval", "kewenangan", "approve reimburse", "otorisasi"], "fallback_contact": "Tim Keuangan (finance@srn-demo.id)"},
+     "aliases": ["approval", "kewenangan", "approve reimburse", "otorisasi"], "fallback_contact": "Tim Keuangan (finance@sinarrantai.example)"},
     {"key": "distribusi", "display_name": "Distribusi & stok cabang", "owner": "budi.hartono@srn-demo.id", "tier": "open",
-     "aliases": ["stok", "pengiriman", "distribusi", "logistik", "keterlambatan"], "fallback_contact": "Tim Operasional (ops@srn-demo.id)"}
+     "aliases": ["stok", "pengiriman", "distribusi", "logistik", "keterlambatan", "gudang", "warehouse",
+                 "forklift", "armada", "truk", "kapal", "stock", "delivery", "shipment"],
+     "fallback_contact": "Tim Operasional (Budi Hartono, Kepala Operasional)"},
+    {"key": "it_akses", "display_name": "Akses sistem & perangkat IT", "tier": "open",
+     "aliases": ["laptop", "vpn", "password", "kata sandi", "akun", "printer", "wifi", "it support",
+                 "email kantor", "reset akses", "komputer"],
+     "fallback_contact": "IT Support (it-support@sinarrantai.example)"}
   ],
   "managers": [
     {"scope_type": "department", "scope_id": "Operasional & Gudang", "manager": "budi.hartono@srn-demo.id"},
@@ -79,7 +85,8 @@
     {"scope_type": "container", "scope_id": "ops-makassar", "manager": "budi.hartono@srn-demo.id"},
     {"scope_type": "topic", "scope_id": "grade_gaji", "manager": "budi.hartono@srn-demo.id"}
   ],
-  "default_contact": "HR Helpdesk (hr@srn-demo.id)",
+  "default_contact": "HR Helpdesk (hr-helpdesk@sinarrantai.example)",
+  "email_domains": ["sinarrantai.example"],
   "documents": [
     {"file": "confluence/HR/sop-reimbursement.md", "container": "space-hr", "source": "confluence", "id": "sop-reimbursement",
      "version": 3, "updated_at": "2025-03-10T10:00:00+07:00", "labels": ["owner-hr"]},

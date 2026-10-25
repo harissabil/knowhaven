@@ -103,6 +103,7 @@ async def _build_tenant(manifest: dict, users: dict[str, uuid.UUID]) -> tuple[uu
         await service.create_tenant(s, tenant_id, t["name"], owner, slug=t["slug"])
         tenant = await s.scalar(select(Tenant))
         tenant.default_contact = manifest.get("default_contact")
+        tenant.email_domains = manifest.get("email_domains", [])
         s.add_all(
             Role(tenant_id=tenant_id, key=r["key"], name=r["name"]) for r in manifest["extra_roles"]
         )

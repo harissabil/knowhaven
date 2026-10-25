@@ -207,7 +207,14 @@ export interface DocumentOut {
   can_download: boolean;
 }
 
-export interface TenantSettingsOut { name: string; slug: string; default_contact: string | null; profile: string | null }
+export interface TenantSettingsOut {
+  name: string;
+  slug: string;
+  default_contact: string | null;
+  profile: string | null;
+  /** Extra company mail domains: addresses on them are work contacts, never masked. */
+  email_domains: string[];
+}
 
 /** GET /api/admin/integrations */
 export interface IntegrationOut {
