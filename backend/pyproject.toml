@@ -23,6 +23,7 @@ dependencies = [
     "pypdf>=6.21.2",
     "python-docx>=1.2.0",
     "python-multipart>=0.0.32",
+    "pyyaml>=6.0",
     "slack-sdk>=3.45.0",
     "sqlalchemy[asyncio]>=2.1.6",
     "uvicorn[standard]>=0.54.0",
@@ -37,6 +38,7 @@ brain-mcp-token = "brain.mcp_server.token_cli:main"
 brain-worker = "brain.worker:main"
 brain-slack-demo = "brain.integrations.slack_demo:main"
 brain-remask = "brain.ingestion.remask:main"
+brain-eval = "brain.eval.run:main"
 
 [build-system]
 requires = ["uv_build>=0.8.22,<0.9.0"]
