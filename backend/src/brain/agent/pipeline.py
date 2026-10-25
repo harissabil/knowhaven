@@ -570,10 +570,27 @@ class _Run:
         uniq = {h.citation_id: h for h in self.retriever.seen.values()}
         profile = uniq.pop(COMPANY_PROFILE_ID, None)
         tagged = {d.split("#")[0] for d in self.document_ids}
-        top = sorted(
+        ranked = sorted(
             uniq.values(),
             key=lambda h: (0 if h.item_id in tagged else 1, -h.score, h.citation_id),
-        )[:MAX_EVIDENCE_HITS]
+        )
+        # Fair share per source type: every type is searched, and one type's weak matches (e.g.
+        # unrelated announcements) must not push another type's best match out of the window.
+        # Types the question is about get two slots per round, the others one.
+        preferred = set(self.und.source_types or ()) if self.und else set()
+        queues = {t: [h for h in ranked if h.type == t] for t in ("doc", "chat", "task")}
+        queues["other"] = [h for h in ranked if h.type not in ("doc", "chat", "task")]
+        top = [h for h in ranked if h.item_id in tagged][:MAX_EVIDENCE_HITS]
+        picked = {h.citation_id for h in top}
+        while len(top) < MAX_EVIDENCE_HITS and any(queues.values()):
+            for t, q in queues.items():
+                for _ in range(2 if t in preferred else 1):
+                    while q and q[0].citation_id in picked:
+                        q.pop(0)
+                    if q and len(top) < MAX_EVIDENCE_HITS:
+                        h = q.pop(0)
+                        top.append(h)
+                        picked.add(h.citation_id)
         return top + [profile] if profile else top
 
     def _allowed_texts(self) -> dict[str, str]:
