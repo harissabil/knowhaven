@@ -18,6 +18,8 @@ _ID = re.compile(r"^(?:CHAT|DOC|TASK)-[A-Za-z0-9][\w.#-]*$")
 _TRAILING_CITE = re.compile(r"([.!?])(\s*)((?:\[[^\[\]]+\]\s*)+)")
 _SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+|\n+")
 _DIGIT_RUN = re.compile(r"\d+")
+# "1. ", "2) ", "- ", "* ", "• " at the start of a line: list markup, not content or a number.
+_LIST_MARKER = re.compile(r"^[ \t]*(?:\d{1,2}[.)]|[-*•])[ \t]+", re.MULTILINE)
 
 
 @dataclass
@@ -40,7 +42,9 @@ def citations_in(text: str) -> list[str]:
 
 
 def _sentences(text: str) -> list[str]:
-    moved = _TRAILING_CITE.sub(lambda m: f" {m.group(3).strip()}{m.group(1)}{m.group(2)}", text)
+    moved = _TRAILING_CITE.sub(
+        lambda m: f" {m.group(3).strip()}{m.group(1)}{m.group(2)}", _LIST_MARKER.sub("", text)
+    )
     return [s.strip() for s in _SENTENCE_SPLIT.split(moved) if s.strip()]
 
 
@@ -108,7 +112,7 @@ def validate(
         | {int(m.group(0)) for m in _DIGIT_RUN.finditer(cited_text)}
     )
     answer_pii_nums = _pii_numbers(text, company_domains)
-    for n in amounts(_BRACKET.sub(" ", text)):
+    for n in amounts(_BRACKET.sub(" ", _LIST_MARKER.sub("", text))):
         if n >= 10 and n not in known and n not in answer_pii_nums:
             problems.append(f"unsupported_number:{n}")
 

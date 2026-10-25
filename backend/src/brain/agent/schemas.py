@@ -19,9 +19,16 @@ class Understanding(BaseModel):
     intent: str = Field(
         description="short snake_case label, e.g. policy_lookup, project_history, task_status"
     )
-    category: Literal["question", "smalltalk", "person_compensation", "action_request"] = Field(
+    category: Literal[
+        "question", "smalltalk", "person_compensation", "action_request", "unclear"
+    ] = Field(
         description="person_compensation = asks the salary/pay of a specific person; "
-        "action_request = asks to change/send/delete something"
+        "action_request = asks to change/send/delete something; "
+        "unclear = names no subject at all and the history doesn't supply one"
+    )
+    clarifying_question: str | None = Field(
+        default=None,
+        description="only for unclear: one short question back to the user with generic examples",
     )
     topic_phrase: str = Field(
         description="the topic exactly as written in the question, copied verbatim"

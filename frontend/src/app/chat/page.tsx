@@ -33,6 +33,7 @@ import { useSession } from "@/store/session";
 import { apiStream, apiFetch, errorText, type CitationItem, type FinalEventData, type TraceEventData } from "@/lib/api";
 import type { ConversationOut, DocumentOut, MessageOut, SourceOut } from "@/lib/contracts";
 import { toast } from "@/components/ui/Toast";
+import { AnswerText } from "@/components/AnswerText";
 import { MentionInput } from "@/components/MentionInput";
 import { plain, present, segments, toMarkup, type Mention } from "@/lib/mentions";
 
@@ -66,12 +67,6 @@ function moodOf(f: FinalEventData): MascotState {
   if (f.decision_path === "policy_refusal") return "refusing";
   if (f.decision_path === "idk" || f.decision_path === "error") return "idk";
   return "answering";
-}
-
-function render(text: string) {
-  return text.split(/(\*\*[^*]+\*\*)/g).map((p, i) =>
-    p.startsWith("**") ? <b key={i}>{p.slice(2, -2)}</b> : <span key={i}>{p}</span>,
-  );
 }
 
 export default function Chat() {
@@ -607,15 +602,21 @@ export default function Chat() {
                         </p>
                       ) : (
                         m.text && (
+                          isBot ? (
+                          <div className="leading-relaxed text-[0.98rem]">
+                            <AnswerText text={m.text} sources={cites.map((c) => c.id)} onOpen={openSource} />
+                            {m.streaming && <span className="inline-block w-[2px] h-4 bg-fg align-middle ml-1 animate-pulse" />}
+                          </div>
+                          ) : (
                           <p className="leading-relaxed text-[0.98rem] whitespace-pre-wrap">
-                            {isBot ? render(m.text) : segments(m.text).map((seg, k) => seg.kind === "text" ? <span key={k}>{seg.text}</span> : (
+                            {segments(m.text).map((seg, k) => seg.kind === "text" ? <span key={k}>{seg.text}</span> : (
                               <button key={k} type="button" onClick={() => openSource(seg.id)} title={seg.id}
                                 className="inline-flex items-center gap-1 px-1.5 rounded-md bg-tint text-brand font-medium hover:underline align-baseline">
                                 <FileText size={13} className="shrink-0" />{seg.title}
                               </button>
                             ))}
-                            {m.streaming && <span className="inline-block w-[2px] h-4 bg-fg align-middle ml-1 animate-pulse" />}
                           </p>
+                          )
                         )
                       )}
 

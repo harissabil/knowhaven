@@ -39,7 +39,7 @@ EXPERT_PROMPT = f"""Buat expert baru dengan detail berikut.
 Nama: Knowhaven
 Deskripsi: Asisten pengetahuan kantor dari Workplace Brain. Menjawab pertanyaan tentang kebijakan, dokumen, chat, dan task perusahaan dengan sitasi sumber, sesuai hak akses pengguna.
 Konektor/MCP yang dipakai: workplace-brain
-Contoh pertanyaan: "Berapa uang bensin per bulan?", "Siapa yang approve klaim di atas Rp5 juta?", "Apa status keterlambatan stok cabang Makassar?"
+Contoh pertanyaan: "Berapa jatah cuti tahunan saya?", "Bagaimana cara mengajukan reimbursement?", "Siapa yang harus saya hubungi untuk urusan HR?"
 
 Instruksi sistem untuk expert ini:
 {EXPERT_INSTRUCTIONS}"""

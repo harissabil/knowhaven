@@ -185,7 +185,7 @@ export default function WorkBuddy() {
               <Info size={16} className="shrink-0 mt-0.5" />
               <span>
                 {l("Pilih expert Knowhaven, lalu tanya misalnya", "Pick the Knowhaven expert and ask, for example,")}{" "}
-                <i>&ldquo;{l("Berapa uang bensin per bulan?", "What is the monthly fuel allowance?")}&rdquo;</i>.{" "}
+                <i>&ldquo;{l("Bagaimana cara mengajukan cuti?", "How do I request leave?")}&rdquo;</i>.{" "}
                 {l("Jawaban datang dengan sitasi yang sama seperti di Knowhaven.", "Answers come with the same citations as in Knowhaven.")}
               </span>
             </p>

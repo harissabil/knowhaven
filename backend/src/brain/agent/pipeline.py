@@ -317,6 +317,15 @@ class _Run:
                 yield e
             yield await self._finish(NOTES["smalltalk"][lang], "answer", [], [], None, [])
             return
+        if und.category == "unclear" and (und.clarifying_question or "").strip():
+            # Asked back before any retrieval: the question comes from the user's words alone, so it
+            # can't reveal data (a hidden project is never named in it).
+            yield self._end(st, "Pertanyaan perlu diperjelas")
+            for e in self._skip_steps(4, 7):
+                yield e
+            text = und.clarifying_question.strip()[:300]
+            yield await self._finish(text, "answer", [], [], None, [])
+            return
         yield self._end(st, "Lolos pemeriksaan kebijakan")
 
         # 4 [LLM+CODE] retrieve -----------------------------------------------------------------------
