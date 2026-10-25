@@ -273,3 +273,57 @@ def test_list_intro_and_source_dates_pass_validation():
         allowed, "kenapa stok telat?",
     )  # fmt: skip
     assert v.ok, v.problems
+
+
+def test_change_announcement_listing_old_and_new_value_is_not_a_tie():
+    """Live E2E 2026-10-25: "naik dari Rp500.000 menjadi Rp750.000" produced claims for both values from the
+    same message, which then tied with itself. The SOP and the town hall notes state one value each."""
+    ann_old = claim(
+        "Rp500.000", "official_announcement", "2026-09-02T02:30", "CHAT-pengumuman-hr-0002"
+    )
+    ann_new = claim(
+        "Rp750.000 per bulan",
+        "official_announcement",
+        "2026-09-02T02:30",
+        "CHAT-pengumuman-hr-0002",
+    )
+    sop = claim(
+        "Rp500.000 per bulan",
+        "official_doc",
+        "2026-02-28T17:00",
+        "DOC-sop#3",
+        "doc",
+        "SOP Reimbursement Biaya Operasional",
+    )
+    town = claim(
+        "Rp750.000 per bulan",
+        "official_doc",
+        "2026-09-24T17:00",
+        "DOC-town-hall#3",
+        "doc",
+        "Notulen Town Hall",
+    )
+    rumour = claim(
+        "1 juta", "team_discussion", "2026-09-25T09:20", "CHAT-general-0005", container="general"
+    )
+    (r,) = conflict.resolve([town, ann_old, ann_new, sop, rumour])
+    assert not r.tie and r.chosen.value.startswith("Rp750.000")
+    assert any(c.item_id == "DOC-sop" for c in r.competing) and r.unverified[0].value == "1 juta"
+
+    # Without the town hall notes the announcement itself is the only source for 750k and still wins.
+    (r2,) = conflict.resolve([ann_old, ann_new, sop, rumour])
+    assert (
+        not r2.tie
+        and r2.chosen.item_id == "CHAT-pengumuman-hr-0002"
+        and r2.reason == "announcement_newer_than_doc"
+    )
+
+
+def test_topic_alias_matches_its_words_in_any_order():
+    from brain.policy.idk import term_in
+
+    assert term_in("gaji level", "Berapa rentang gaji pokok level 3?")  # live E2E T14 phrasing
+    assert term_in("grade gaji", "Grade gaji level 3 berapa?")
+    assert term_in("bensin", "Uang bensin per bulan berapa?")
+    assert not term_in("gaji level", "Berapa gaji pokok saya?")  # one word missing
+    assert not term_in("leave", "Who is on leaveless duty?")  # whole words only
