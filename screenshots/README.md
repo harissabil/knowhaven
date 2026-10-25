@@ -1,6 +1,6 @@
 # Screenshots
 
-Screenshots of the live test runs referenced in [TEST_RESULTS.md](../TEST_RESULTS.md).
+Screenshots of the live test runs referenced in [TEST_RESULTS.md](../TEST_RESULTS.md), captured on 25 October 2026 from the deployed web app. `t22-workbuddy.png` is still to be added (it needs the WorkBuddy desktop client).
 
 | File | Test | Shows |
 |---|---|---|
