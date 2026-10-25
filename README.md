@@ -193,13 +193,6 @@ validation guarantees, so WorkBuddy talks to Knowhaven only through the full pip
 cannot clear answers that are already displayed in a user's WorkBuddy window; this is disclosed in
 the accountability sheet.
 
-**How we used CodeBuddy while building:** we asked it to review this accountability sheet against
-the guidebook and against the code. It found three claims the code did not support: the assistant
-does write to Confluence after an approval, auditors do see answer text in the audit log, and raw
-personal data does reach the model when a user may see it and the question needs it. We corrected
-the sheet. We also used WorkBuddy as a second client to check that answers, citations and refusals
-match the web app exactly (see the T22 screenshots).
-
 ## Try it
 
 The live demo link is in the submission form. Demo accounts:
