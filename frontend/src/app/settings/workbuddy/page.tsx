@@ -120,7 +120,7 @@ export default function WorkBuddy() {
     <Shell title={t("workbuddy")}>
       <div className="card p-6 flex flex-col gap-6 max-w-3xl">
         <div>
-          <div className="flex items-center gap-2.5 mb-1.5"><WorkBuddyLogo size={28} /><h2 className="text-xl font-bold">{l("Hubungkan Knowhaven ke WorkBuddy", "Connect Knowhaven to WorkBuddy")}</h2></div>
+          <div className="flex items-center gap-2.5 mb-3"><WorkBuddyLogo size={28} /><h2 className="text-xl font-bold">{l("Hubungkan Knowhaven ke WorkBuddy", "Connect Knowhaven to WorkBuddy")}</h2></div>
           <p className="text-sm text-muted">
             {l("Tanya Knowhaven langsung dari WorkBuddy. Token terikat ke", "Ask Knowhaven right from WorkBuddy. The token is bound to")}{" "}
             <b className="text-fg">{persona?.name}</b> {l("di", "in")} <b className="text-fg">{tenantName}</b>.{" "}
