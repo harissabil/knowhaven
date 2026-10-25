@@ -193,9 +193,6 @@ validation guarantees, so WorkBuddy talks to Knowhaven only through the full pip
 cannot clear answers that are already displayed in a user's WorkBuddy window; this is disclosed in
 the accountability sheet.
 
-<!-- TODO (team): add 2-3 sentences on how the team used WorkBuddy while building, from your own
-experience, before submitting. Product sharing is a required submission item. -->
-
 ## Try it
 
 The live demo link is in the submission form. Demo accounts:
