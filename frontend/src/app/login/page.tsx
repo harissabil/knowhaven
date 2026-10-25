@@ -12,15 +12,11 @@ import { ApiError, errorText } from "@/lib/api";
 // Seeded demo accounts (backend/seed/*/manifest.json). Shown on purpose (doc §14.3); these are
 // ordinary per-user passwords, there is no shared master password.
 const DEMO: { email: string; password: string; id: string; en: string }[] = [
-  { email: "dimas@srn-demo.id", password: "Demo-SRN-2026!", id: "Karyawan baru · SRN", en: "New hire · SRN" },
-  { email: "rina@srn-demo.id", password: "Demo-SRN-2026!", id: "Staf ops Makassar · SRN", en: "Makassar ops staff · SRN" },
-  { email: "andi@srn-demo.id", password: "Demo-SRN-2026!", id: "Project manager · SRN", en: "Project manager · SRN" },
-  { email: "sari@srn-demo.id", password: "Demo-SRN-2026!", id: "HR · SRN", en: "HR · SRN" },
-  { email: "budi.hartono@srn-demo.id", password: "Demo-SRN-2026!", id: "Manajer operasional · SRN", en: "Operations manager · SRN" },
-  { email: "lina@srn-demo.id", password: "Demo-SRN-2026!", id: "Auditor · SRN", en: "Auditor · SRN" },
-  { email: "admin@srn-demo.id", password: "Demo-SRN-2026!", id: "Owner/Admin · SRN", en: "Owner/Admin · SRN" },
-  { email: "yoga@konsultan-demo.id", password: "Demo-Konsultan-2026!", id: "Konsultan · SRN + KLM", en: "Consultant · SRN + KLM" },
-  { email: "harjo@klm-demo.id", password: "Demo-KLM-2026!", id: "Owner · KLM", en: "Owner · KLM" },
+  { email: "dimas@srn-demo.id", password: "Demo-SRN-2026!", id: "Karyawan baru · gudang Jakarta", en: "New hire · Jakarta warehouse" },
+  { email: "rina@srn-demo.id", password: "Demo-SRN-2026!", id: "Staf operasional · cabang Makassar", en: "Operations staff · Makassar branch" },
+  { email: "sari@srn-demo.id", password: "Demo-SRN-2026!", id: "HR Manager · akses data pribadi", en: "HR Manager · personal-data access" },
+  { email: "bambang@srn-demo.id", password: "Demo-SRN-2026!", id: "Direktur Utama · owner, admin, auditor", en: "CEO · owner, admin, auditor" },
+  { email: "yoga@konsultan-demo.id", password: "Demo-Konsultan-2026!", id: "Konsultan eksternal · 2 perusahaan", en: "External consultant · 2 companies" },
 ];
 
 export default function Login() {
