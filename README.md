@@ -6,6 +6,18 @@ Challenge A, The Workplace Brain · AI CAN DO IT, Tencent Cloud Hackathon Indone
 
 Companion documents: [Accountability sheet](./ACCOUNTABILITY_SHEET.md) · [Test results](./TEST_RESULTS.md) · [Evaluation method](./backend/eval/README.md)
 
+## Contents
+
+- [Overview](#overview)
+- [The problem](#the-problem)
+- [How it works](#how-it-works): [architecture](#architecture), [design trade-offs](#key-design-trade-offs), [prompt design](#prompt-design)
+- [Results](#results)
+- [Business value](#business-value)
+- [WorkBuddy](#workbuddy)
+- [Try it](#try-it)
+- [Run locally](#run-locally)
+- [Stack](#stack)
+
 ## Overview
 
 Knowhaven is a knowledge assistant for Indonesian companies. Employees ask in Bahasa Indonesia,
