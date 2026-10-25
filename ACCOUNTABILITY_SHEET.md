@@ -1,6 +1,7 @@
 # Accountability sheet: Knowhaven
 
-Challenge A, The Workplace Brain. Applies to both entry points: the web app and the WorkBuddy MCP connector.
+Challenge A, The Workplace Brain. Questions follow the same rules from both entry points, the web app
+and the WorkBuddy MCP connector; approvals are made in the web app only.
 
 ## What it can access
 
@@ -12,15 +13,17 @@ Challenge A, The Workplace Brain. Applies to both entry points: the web app and 
 - New sources are hidden until an admin maps them to roles.
 - Personal data (NIK, NPWP, phone, personal email, bank account) is masked. Raw values are used
   only when the user's role may see that data type and the question needs it.
-- Admin and auditor roles manage settings and read the audit log; on their own they give no access
-  to company content.
+- Admin and auditor roles give no access to sources on their own. Auditors read the audit log,
+  which shows each question and answer (personal data masked), because that is what they audit.
 
 ## What it does on its own
 
 - Reads, searches, and answers with a citation for every statement.
-- Decides between conflicting sources with fixed rules (official over discussion, newer official
-  over older) and says which source it used and why; a same-day tie is shown as a tie.
-- Says "I don't know" and names the topic owner when nothing the user may see answers the question.
+- Decides between sources that give different amounts or counts with fixed rules (official over
+  discussion, newer official over older) and says which source it used and why; a same-day tie is
+  shown as a tie.
+- Says "I don't know" and names the topic owner, or the company's default contact, when nothing the
+  user may see answers the question.
 - Masks personal data, checks citations and numbers, and logs every question, the sources it
   retrieved and the answer, in a hash-chained audit log.
 - Drafts a change to a document that a newer announcement has made outdated (draft only).
@@ -34,7 +37,8 @@ Challenge A, The Workplace Brain. Applies to both entry points: the web app and 
 | Making a new channel, space or folder visible to roles | Company admin |
 | Activating someone who joined with the company code | Company admin |
 
-Nobody approves their own request. Every approval is logged.
+Nobody approves their own access request; document drafts go to the topic owner. Every approval is
+logged.
 
 ## What it will never do
 
@@ -43,8 +47,8 @@ Nobody approves their own request. Every approval is logged.
   as one about a project that does not exist.
 - Trust a role or identity claimed in the chat ("saya HRD").
 - Follow instructions found inside documents or messages.
-- Change, send or delete anything without approval; it has no write access to Slack, Confluence or
-  Jira.
+- Change, send or delete anything without approval. Slack and Jira are read-only; its only write is
+  an approved update to a Confluence page or a new version of an uploaded document.
 - Change or delete its own audit log.
 
 ## Known limitations
@@ -53,5 +57,9 @@ Nobody approves their own request. Every approval is logged.
   the new permissions, but text already shown in the user's WorkBuddy window cannot be removed.
 - WorkBuddy's model is instructed to show Knowhaven's answer unchanged but could still paraphrase it.
 - It is sometimes too cautious: in our evaluation 4 of 38 answerable questions got "I don't know".
-- Masked text is sent to Gemini on Google Cloud; the application and database run on Tencent Cloud
-  Lighthouse and Neon.
+- Conflicts are decided by posting date, not by an effective date written in the text: an
+  announcement saying "from 1 November" applies from the day it is posted.
+- Only differing amounts and counts are treated as conflicts; differing wording is not.
+- Answers that combine chat, documents and Jira sometimes leave the chat source uncited.
+- Text sent to Gemini on Google Cloud is masked, except personal data the user may see and the
+  question needs. The application and database run on Tencent Cloud Lighthouse and Neon.
