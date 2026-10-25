@@ -36,11 +36,8 @@ from brain.ingestion.extract import Extractor, LlmExtractor, TopicHint
 from brain.ingestion.injection import detect_injection
 from brain.ingestion.types import IngestItem
 from brain.llm.embed import GeminiEmbedder, get_embedder
+from brain.tenancy import domains as company_domains
 
-FREE_MAIL = frozenset({
-    "gmail.com", "yahoo.com", "yahoo.co.id", "hotmail.com", "outlook.com", "live.com",
-    "icloud.com", "ymail.com", "proton.me", "protonmail.com", "aol.com",
-})  # fmt: skip
 CONTEXT_BEFORE, CONTEXT_AFTER = 2, 1
 EMBED_CHARS = 2000
 
@@ -219,6 +216,7 @@ class Ingestor:
                 for t in await s.scalars(select(TopicOwner))
             ]
             taken_ids = set(await s.scalars(select(SourceItem.id).where(SourceItem.type != "chat")))
+            declared_domains = await company_domains.configured(s)
             chat_counters: dict[uuid.UUID, int] = {}
             prior_context: dict[uuid.UUID, list[str]] = {}
             chat_containers = [
@@ -271,7 +269,7 @@ class Ingestor:
             for p in profiles
             if p.user_id in users
         ]
-        domains = frozenset(m.email.split("@")[1] for m in members) - FREE_MAIL
+        domains = company_domains.from_emails(m.email for m in members) | declared_domains
         return _State(
             containers, existing, members, topics, domains, taken_ids, chat_counters, prior_context
         )

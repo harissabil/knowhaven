@@ -47,6 +47,15 @@ function formatIndustryForProfile(industry: string, industryOther: string): stri
   return `Bidang usaha / Industry: ${found.id} / ${found.en}`;
 }
 
+function domainList(text: string): string[] {
+  const out: string[] = [];
+  for (const d of text.split(/[\s,;]+/)) {
+    const v = d.trim().toLowerCase().replace(/^@/, "");
+    if (v && !out.includes(v)) out.push(v);
+  }
+  return out;
+}
+
 /** Admin-only: Company Name & Industry settings based on onboarding data. */
 export function CompanyProfileCard() {
   const l = useL();
@@ -60,10 +69,12 @@ export function CompanyProfileCard() {
   const [slug, setSlug] = useState("");
   const [industry, setIndustry] = useState("");
   const [industryOther, setIndustryOther] = useState("");
+  const [domains, setDomains] = useState("");
 
   const [savedName, setSavedName] = useState("");
   const [savedIndustry, setSavedIndustry] = useState("");
   const [savedIndustryOther, setSavedIndustryOther] = useState("");
+  const [savedDomains, setSavedDomains] = useState("");
 
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -81,6 +92,8 @@ export function CompanyProfileCard() {
         setSavedName(t.name);
         setSavedIndustry(parsed.industry);
         setSavedIndustryOther(parsed.industryOther);
+        setDomains((t.email_domains ?? []).join(", "));
+        setSavedDomains((t.email_domains ?? []).join(", "));
         setLoaded(true);
       })
       .catch((e) => setErr(errorText(e)));
@@ -92,9 +105,10 @@ export function CompanyProfileCard() {
     setErr("");
     const cleanName = name.trim();
     const profileValue = formatIndustryForProfile(industry, industryOther);
-    const body: Record<string, string | null> = {
+    const body: Record<string, string | string[] | null> = {
       name: cleanName,
       profile: profileValue,
+      email_domains: domainList(domains),
     };
     try {
       const t = await apiFetch<TenantSettingsOut>("/api/admin/tenant", {
@@ -106,6 +120,8 @@ export function CompanyProfileCard() {
       setSavedName(t.name);
       setSavedIndustry(industry);
       setSavedIndustryOther(industryOther.trim());
+      setDomains(t.email_domains.join(", "));
+      setSavedDomains(t.email_domains.join(", "));
       if (tid) {
         patchWizard(tid, { industry, industryOther: industryOther.trim() });
       }
@@ -124,7 +140,8 @@ export function CompanyProfileCard() {
     loaded &&
     (name.trim() !== savedName ||
       industry !== savedIndustry ||
-      (industry === "other" && industryOther.trim() !== savedIndustryOther));
+      (industry === "other" && industryOther.trim() !== savedIndustryOther) ||
+      domainList(domains).join(", ") !== savedDomains);
 
   const valid =
     name.trim().length >= 2 && (industry !== "other" || industryOther.trim().length > 0);
@@ -180,6 +197,22 @@ export function CompanyProfileCard() {
               />
             )}
           </div>
+
+          <label className="field">
+            {l("Domain email perusahaan", "Company email domains")}
+            <input
+              className="input font-normal font-mono"
+              value={domains}
+              onChange={(e) => setDomains(e.target.value)}
+              placeholder={l("mis. perusahaan.co.id, perusahaan.com", "e.g. company.com, company.co.id")}
+            />
+            <span className="text-xs text-muted font-normal">
+              {l(
+                "Alamat di domain ini dianggap kontak kerja dan tidak disamarkan. Domain email anggota otomatis termasuk; tambahkan domain lain yang dipakai di dokumen (mis. di Confluence).",
+                "Addresses on these domains are work contacts and are not masked. Members' email domains are included automatically; add any other domain your documents use (e.g. in Confluence)."
+              )}
+            </span>
+          </label>
 
           <div className="flex justify-end pt-4 border-t border-line">
             <button

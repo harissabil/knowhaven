@@ -31,6 +31,7 @@ from brain.db.models import (
     UserRole,
 )
 from brain.db.session import tenant_session
+from brain.ingestion.remask import remask
 from brain.rbac.context import RequestContext
 from brain.rbac.state import bump_permission_version
 
@@ -548,6 +549,7 @@ async def upsert_topic(topic_key: str, body: TopicIn, ctx: Admin) -> VersionOut:
             for k, val in body.model_dump().items():
                 setattr(existing, k, val)
         await s.flush()
+        await remask(s)  # the fallback contact may name a company mail domain
         v = await _changed(s, ctx, "topic.upsert", topic_key=topic_key, tier=body.tier)
     return VersionOut(permission_version=v)
 
