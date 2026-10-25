@@ -31,6 +31,7 @@ def get_pipeline() -> Pipeline:
 class ChatIn(BaseModel):
     question: str = Field(min_length=1, max_length=2000)
     conversation_id: uuid.UUID | None = None
+    document_ids: list[str] = Field(default_factory=list, max_length=10)
 
 
 @router.post("/chat")
@@ -43,7 +44,9 @@ async def chat(
 
     async def produce() -> None:
         try:
-            async for ev in pipeline.run(ctx, body.question, body.conversation_id, "web"):
+            async for ev in pipeline.run(
+                ctx, body.question, body.conversation_id, "web", document_ids=body.document_ids
+            ):
                 await queue.put(ev)
         finally:
             await queue.put(_STOP)

@@ -7,6 +7,7 @@ import { useSession } from "@/store/session";
 import { useL } from "@/lib/i18n";
 import { ApiError, apiFetch, errorText } from "@/lib/api";
 import type { SourceOut } from "@/lib/contracts";
+import { formatChunkText } from "@/components/documents";
 import { AlertTriangle, Calendar, Download, ExternalLink, FileText, ShieldCheck, User } from "lucide-react";
 
 export default function SourcePage() {
@@ -94,7 +95,7 @@ export default function SourcePage() {
               <div key={c.citation_id} id={`chunk-${c.citation_id}`}
                 className={`p-4 rounded-erp border leading-relaxed text-[0.95rem] whitespace-pre-wrap ${c.citation_id === decodedId ? "bg-tint border-brand" : "bg-surface2/60 border-line"}`}>
                 {c.anchor && <p className="eyebrow mb-1">{c.anchor}</p>}
-                {c.text}
+                {formatChunkText(c.text)}
               </div>
             ))}
           </div>

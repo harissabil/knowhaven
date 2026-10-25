@@ -6,9 +6,11 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ArrowRight, Building2, Check, Eye, EyeOff, KeyRound } from "lucide-react";
 import { Mascot, type MascotState } from "@/components/mascot/Mascot";
 import { KnowhavenLogo } from "@/components/BrandLogos";
+import { Combobox } from "@/components/Combobox";
 import { Confetti } from "@/components/ui/Confetti";
 import { Spot } from "@/components/ui/Spot";
 import { usePersona, useSession } from "@/store/session";
+import { INDUSTRIES } from "@/mock/admin";
 import { useL } from "@/lib/i18n";
 import { ApiError, errorText } from "@/lib/api";
 
@@ -26,7 +28,7 @@ export default function Onboarding() {
   const { persona } = usePersona();
   const l = useL();
   const [stage, setStage] = useState<Stage>("account");
-  const [f, setF] = useState({ name: "", email: "", pw: "", company: "", code: "" });
+  const [f, setF] = useState({ name: "", email: "", pw: "", company: "", industry: "", industryOther: "", code: "" });
   const [show, setShow] = useState(false);
   const [err, setErr] = useState("");
   const [shake, setShake] = useState(0);
@@ -40,6 +42,10 @@ export default function Onboarding() {
   const strength = strengthOf(f.pw);
   const STRENGTH = [l("Terlalu pendek", "Too short"), l("Lemah", "Weak"), l("Cukup", "Okay"), l("Kuat", "Strong"), l("Sangat kuat", "Excellent")];
   const company = f.company.trim();
+  const industryObj = INDUSTRIES.find((i) => i.value === f.industry);
+  const industryLabel = f.industry === "other"
+    ? f.industryOther.trim()
+    : industryObj ? `${industryObj.id} / ${industryObj.en}` : "";
 
   const BUILD = useMemo(() => [
     l("Membuat workspace", "Creating your workspace"),
@@ -51,7 +57,7 @@ export default function Onboarding() {
 
   async function build() {
     setStage("building"); setTick(0); setErr("");
-    const created = createCompany(company);
+    const created = createCompany(company, industryLabel || undefined, f.industry || undefined, f.industryOther || undefined);
     for (let i = 1; i <= BUILD.length; i++) { await sleep(450); setTick(i); }
     try {
       await created;
@@ -193,7 +199,30 @@ export default function Onboarding() {
                 onSubmit={(e) => { e.preventDefault(); if (company.length >= 2) build(); }}>
                 <h1 className="text-4xl">{l("Beri nama perusahaan Anda", "Name your company")}</h1>
                 {err && <motion.p key={shake} initial={{ x: -8 }} animate={{ x: [0, -8, 8, -4, 4, 0] }} role="alert" className="text-bad">{err}</motion.p>}
-                <input className="input !text-xl !py-3" autoFocus value={f.company} onChange={up("company")} aria-label={l("Nama perusahaan", "Company name")} placeholder={l("mis. PT Sinar Rantai Nusantara", "e.g. Acme Logistics")} />
+                <label className="flex flex-col gap-1.5">
+                  <span className="font-medium text-sm">{l("Nama perusahaan", "Company name")}</span>
+                  <input className="input !text-xl !py-3" autoFocus value={f.company} onChange={up("company")} aria-label={l("Nama perusahaan", "Company name")} placeholder={l("mis. PT Sinar Rantai Nusantara", "e.g. Acme Logistics")} />
+                </label>
+                <div className="flex flex-col gap-1.5">
+                  <span className="font-medium text-sm">{l("Bidang usaha", "Company industry")}</span>
+                  <Combobox
+                    label={l("Bidang usaha", "Company industry")}
+                    options={INDUSTRIES.map((i) => ({ value: i.value, label: i[lang] }))}
+                    value={f.industry}
+                    placeholder={l("Cari atau pilih bidang usaha…", "Search or choose an industry…")}
+                    emptyText={l("Tidak ada yang cocok. Pilih \"Lainnya\".", "No match. Choose \"Other\".")}
+                    onChange={(v) => setF({ ...f, industry: v })}
+                  />
+                  {f.industry === "other" && (
+                    <input
+                      className="input mt-1"
+                      aria-label={l("Sebutkan bidang usaha", "Specify your industry")}
+                      value={f.industryOther}
+                      onChange={up("industryOther")}
+                      placeholder={l("Sebutkan bidang usaha Anda", "Specify your industry")}
+                    />
+                  )}
+                </div>
                 <div className="card p-4 flex items-center gap-4 overflow-hidden">
                   <motion.span key={company} initial={{ scale: 0.7, rotate: -8 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: "spring", stiffness: 300, damping: 14 }}
                     className="w-14 h-14 rounded-2xl grid place-items-center text-xl font-semibold text-white shrink-0"
@@ -203,11 +232,16 @@ export default function Onboarding() {
                   <div className="min-w-0">
                     <p className="font-semibold text-lg truncate">{company || l("Perusahaan Anda", "Your company")}</p>
                     <p className="eyebrow truncate">knowhaven.app/{slugOf(company) || "..."}</p>
+                    {f.industry && (
+                      <p className="text-xs text-muted truncate mt-0.5">
+                        {f.industry === "other" ? f.industryOther || l("Lainnya", "Other") : industryObj?.[lang]}
+                      </p>
+                    )}
                   </div>
                 </div>
                 <div className="flex gap-3">
                   <button type="button" className="btn" onClick={() => setStage("choose")}>{l("Kembali", "Back")}</button>
-                  <button className="btn btn-primary btn-lg flex-1" disabled={company.length < 2}>{l("Bangun rumah pengetahuan saya", "Build my haven")} <ArrowRight size={18} /></button>
+                  <button className="btn btn-primary btn-lg flex-1" disabled={company.length < 2 || (f.industry === "other" && !f.industryOther.trim())}>{l("Bangun rumah pengetahuan saya", "Build my haven")} <ArrowRight size={18} /></button>
                 </div>
               </motion.form>
             )}

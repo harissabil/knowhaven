@@ -18,6 +18,7 @@ router = APIRouter(tags=["tenants"])
 
 class CreateTenantIn(BaseModel):
     name: str = Field(min_length=2, max_length=120)
+    industry: str | None = Field(default=None, max_length=200)
 
 
 class CreateTenantOut(BaseModel):
@@ -51,8 +52,13 @@ class ContextOut(BaseModel):
 async def create_tenant(body: CreateTenantIn, auth: Auth) -> CreateTenantOut:
     """Any logged-in user can create a company and becomes its Owner + Admin (4.3)."""
     tenant_id = uuid.uuid4()
+    profile = (
+        f"Bidang usaha / Industry: {body.industry.strip()}"
+        if body.industry and body.industry.strip()
+        else None
+    )
     async with tenant_session(tenant_id) as s:
-        code = await service.create_tenant(s, tenant_id, body.name, auth.user_id)
+        code = await service.create_tenant(s, tenant_id, body.name, auth.user_id, profile=profile)
     async with global_session() as s:
         await set_active_tenant(s, auth.session_id, tenant_id)
     me = await build_me(replace(auth, active_tenant_id=tenant_id))

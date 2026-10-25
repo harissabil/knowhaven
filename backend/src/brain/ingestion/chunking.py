@@ -10,6 +10,9 @@ MAX_CHARS = 1500
 
 _HEADING = re.compile(r"^(#{1,6})\s+(.+?)\s*#*\s*$")
 _NUMBERED = re.compile(r"^(\d+(?:\.\d+)*)\.?\s+")
+_LIST_LINE = re.compile(r"^\s*(?:(?:\d+(?:\.\d+)*|[a-zA-Z])[.)]|[-*•])\s+")
+# Split sentences on . ! ? + space, except after a standalone number/initial ("1.", "A.").
+_SENTENCE_SPLIT = re.compile(r"(?<!\b\d)(?<!\b\d\d)(?<!\b[A-Za-z])(?<=[.!?])\s+")
 
 
 def slugify(value: str, max_len: int = 48) -> str:
@@ -23,21 +26,46 @@ def heading_anchor(heading: str) -> str:
     return m.group(1) if m else slugify(heading, 32)
 
 
+def _split_oversized_para(para: str, max_chars: int) -> list[tuple[str, str]]:
+    """Returns (piece, separator_after) for a paragraph that exceeds max_chars."""
+    lines = para.splitlines()
+    if len(lines) > 1 and any(_LIST_LINE.match(ln) for ln in lines):
+        out: list[tuple[str, str]] = []
+        for ln in lines:
+            if len(ln) <= max_chars:
+                out.append((ln, "\n"))
+            else:
+                sents = _SENTENCE_SPLIT.split(ln)
+                for idx, s in enumerate(sents):
+                    out.append((s, "\n" if idx == len(sents) - 1 else " "))
+        return out
+    sents = _SENTENCE_SPLIT.split(para)
+    return [(s, "\n\n" if idx == len(sents) - 1 else " ") for idx, s in enumerate(sents)]
+
+
 def split_long(text: str, max_chars: int = MAX_CHARS) -> list[str]:
     text = text.strip()
     if len(text) <= max_chars:
         return [text] if text else []
     parts, buf = [], ""
     for para in re.split(r"\n\s*\n", text):
-        pieces = [para] if len(para) <= max_chars else re.split(r"(?<=[.!?])\s+", para)
-        for piece in pieces:
+        para = para.strip()
+        if not para:
+            continue
+        pieces = (
+            [(para, "\n\n")] if len(para) <= max_chars else _split_oversized_para(para, max_chars)
+        )
+        for piece, sep in pieces:
             while len(piece) > max_chars:  # one enormous sentence
+                if buf.strip():
+                    parts.append(buf.strip())
+                    buf = ""
                 parts.append(piece[:max_chars])
                 piece = piece[max_chars:]
-            if len(buf) + len(piece) + 2 > max_chars and buf:
+            if len(buf) + len(piece) > max_chars and buf.strip():
                 parts.append(buf.strip())
                 buf = ""
-            buf += piece + "\n\n"
+            buf += piece + sep
     if buf.strip():
         parts.append(buf.strip())
     return parts

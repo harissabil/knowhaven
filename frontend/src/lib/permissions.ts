@@ -41,6 +41,7 @@ export const NAV: NavItem[] = [
   { href: "/approvals", id: "approvals", cap: "approve", section: "daily" },
   { href: "/documents", id: "documents", cap: "chat", section: "daily" },
   // Manage the company: people first (pending members / invites), then rules, then data.
+  { href: "/admin/company", id: "company", cap: "admin", section: "manage" },
   { href: "/admin/members", id: "members", cap: "admin", section: "manage" },
   { href: "/admin/invites", id: "invites", cap: "admin", section: "manage" },
   { href: "/admin/upload", id: "upload", cap: "upload", section: "manage" },

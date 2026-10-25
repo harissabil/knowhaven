@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, ChevronRight, Download, Lock, MessageSquare, ShieldAlert, Trash2, Upload, X } from "lucide-react";
 import { Shell } from "@/components/Shell";
 import { Mascot } from "@/components/mascot/Mascot";
-import { FileIcon, Readers, relTime } from "@/components/documents";
+import { FileIcon, Readers, formatChunkText, relTime } from "@/components/documents";
 import { useL, useT } from "@/lib/i18n";
 import { useSession } from "@/store/session";
 import { ApiError, apiFetch, errorText } from "@/lib/api";
@@ -117,7 +117,7 @@ export default function DocumentPage() {
             </div>
             <div className="flex flex-wrap gap-2">
               {doc.can_read && (
-                <Link className="btn" href={`/chat?q=${encodeURIComponent(lang === "id" ? `Ringkas dokumen "${doc.title || doc.filename}"` : `Summarize the document "${doc.title || doc.filename}"`)}`}>
+                <Link className="btn btn-primary" href={`/chat?docs=${encodeURIComponent(doc.id)}`}>
                   <MessageSquare size={15} /> {l("Tanya Havi", "Ask Havi")}
                 </Link>
               )}
@@ -162,7 +162,7 @@ export default function DocumentPage() {
                 {source?.chunks.map((c) => (
                   <div key={c.citation_id} className="p-3 rounded-erp bg-surface2/60 border border-line whitespace-pre-wrap text-[0.95rem] leading-relaxed">
                     {c.anchor && <p className="eyebrow mb-1">{c.anchor} · <span className="font-mono normal-case">{c.citation_id}</span></p>}
-                    {c.text}
+                    {formatChunkText(c.text)}
                   </div>
                 ))}
               </div>

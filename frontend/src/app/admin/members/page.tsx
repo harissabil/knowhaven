@@ -132,6 +132,12 @@ export default function Members() {
   const [selectedMember, setSelectedMember] = useState<MemberItem | null>(null);
   const [modalMode, setModalMode] = useState<"approve" | "editRoles" | "remove" | "manageRoles" | null>(null);
   const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
+  const [deptDraft, setDeptDraft] = useState("");
+  const [titleDraft, setTitleDraft] = useState("");
+
+  const existingDepartments = Array.from(
+    new Set(members.map((m) => m.department).filter((d) => d && d !== "—"))
+  ).sort();
 
   // Role CRUD state inside Manage Roles modal
   const [newRoleName, setNewRoleName] = useState("");
@@ -166,12 +172,16 @@ export default function Members() {
   const handleOpenApprove = (m: MemberItem) => {
     setSelectedMember(m);
     setSelectedRoles(["staff"]); // default suggested role (a key that does not exist is ignored)
+    setDeptDraft(m.department === "—" ? "" : m.department);
+    setTitleDraft(m.title || "");
     setModalMode("approve");
   };
 
   const handleOpenEditRoles = (m: MemberItem) => {
     setSelectedMember(m);
     setSelectedRoles([...m.roles]);
+    setDeptDraft(m.department === "—" ? "" : m.department);
+    setTitleDraft(m.title || "");
     setModalMode("editRoles");
   };
 
@@ -190,6 +200,8 @@ export default function Members() {
     setSelectedMember(null);
     setModalMode(null);
     setSelectedRoles([]);
+    setDeptDraft("");
+    setTitleDraft("");
     setEditingRoleId(null);
     setDeletingRoleId(null);
   };
@@ -270,18 +282,38 @@ export default function Members() {
       return;
     }
 
+    const cleanDept = deptDraft.trim();
+    const cleanTitle = titleDraft.trim();
+
     try {
       await apiFetch(`/api/admin/members/${selectedMember.id}/approve`, {
         method: "POST",
         body: JSON.stringify({ role_ids: roleIds(selectedRoles) }),
       });
+      if (cleanDept || cleanTitle) {
+        await apiFetch(`/api/admin/members/${selectedMember.id}/profile`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            department: cleanDept || null,
+            title: cleanTitle || null,
+          }),
+        });
+      }
     } catch (e) {
       return fail(e);
     }
 
     setMembers((prev) =>
       prev.map((m) =>
-        m.id === selectedMember.id ? { ...m, status: "active", roles: selectedRoles } : m
+        m.id === selectedMember.id
+          ? {
+              ...m,
+              status: "active",
+              roles: selectedRoles,
+              department: cleanDept || "—",
+              title: cleanTitle,
+            }
+          : m
       )
     );
     toast(
@@ -310,22 +342,46 @@ export default function Members() {
       return;
     }
 
+    const cleanDept = deptDraft.trim();
+    const cleanTitle = titleDraft.trim();
+    const origDept = selectedMember.department === "—" ? "" : selectedMember.department;
+    const origTitle = selectedMember.title || "";
+    const profileChanged = cleanDept !== origDept || cleanTitle !== origTitle;
+
     try {
       await apiFetch(`/api/admin/members/${selectedMember.id}/roles`, {
         method: "PUT",
         body: JSON.stringify({ roles: roleIds(selectedRoles).map((role_id) => ({ role_id })) }),
       });
+      if (profileChanged) {
+        await apiFetch(`/api/admin/members/${selectedMember.id}/profile`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            department: cleanDept || null,
+            title: cleanTitle || null,
+          }),
+        });
+      }
     } catch (e) {
       return fail(e);
     }
 
     setMembers((prev) =>
-      prev.map((m) => (m.id === selectedMember.id ? { ...m, roles: selectedRoles } : m))
+      prev.map((m) =>
+        m.id === selectedMember.id
+          ? {
+              ...m,
+              roles: selectedRoles,
+              department: cleanDept || "—",
+              title: cleanTitle,
+            }
+          : m
+      )
     );
     toast(
       l(
-        `Peran untuk ${selectedMember.name} berhasil diperbarui.`,
-        `Roles for ${selectedMember.name} successfully updated.`
+        `Profil & peran untuk ${selectedMember.name} berhasil diperbarui.`,
+        `Profile & roles for ${selectedMember.name} successfully updated.`
       )
     );
     closeModal();
@@ -533,10 +589,10 @@ export default function Members() {
                             <button
                               className="btn !py-1 !px-2.5 text-xs inline-flex items-center gap-1 hover:border-brand"
                               onClick={() => handleOpenEditRoles(m)}
-                              title={l("Ubah peran bisnis dan sistem", "Edit business & system roles")}
+                              title={l("Ubah departemen, jabatan, dan peran", "Edit department, title, and roles")}
                             >
                               <Edit2 size={12} />
-                              <span>{l("Ubah peran", "Edit roles")}</span>
+                              <span>{l("Ubah", "Edit")}</span>
                             </button>
                             <button
                               className="btn !py-1 !px-2.5 text-xs text-muted hover:text-bad"
@@ -613,9 +669,29 @@ export default function Members() {
                 <p>
                   <span className="text-muted">Email:</span> {selectedMember.email}
                 </p>
-                <p>
-                  <span className="text-muted">{l("Departemen", "Department")}:</span> {selectedMember.department}
-                </p>
+              </div>
+
+              {/* Department & Title fields */}
+              <div className="grid sm:grid-cols-2 gap-3 mb-4">
+                <label className="flex flex-col gap-1 text-xs">
+                  <span className="font-semibold text-fg">{l("Departemen", "Department")}</span>
+                  <input
+                    className="input !py-1.5 text-sm font-normal"
+                    list="member-departments-list"
+                    value={deptDraft}
+                    onChange={(e) => setDeptDraft(e.target.value)}
+                    placeholder={l("mis. Operasional, HR, Keuangan", "e.g. Operations, HR, Finance")}
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-xs">
+                  <span className="font-semibold text-fg">{l("Jabatan", "Job Title")}</span>
+                  <input
+                    className="input !py-1.5 text-sm font-normal"
+                    value={titleDraft}
+                    onChange={(e) => setTitleDraft(e.target.value)}
+                    placeholder={l("mis. Manajer Gudang", "e.g. Warehouse Manager")}
+                  />
+                </label>
               </div>
 
               {/* Roles selection */}
@@ -691,7 +767,7 @@ export default function Members() {
                 <div>
                   <h3 className="text-xl font-bold flex items-center gap-2">
                     <Edit2 size={18} className="text-brand" />
-                    {l("Kelola Peran Anggota", "Manage Member Roles")}
+                    {l("Kelola Profil & Peran Anggota", "Manage Member Profile & Roles")}
                   </h3>
                   <p className="text-sm text-muted mt-0.5">
                     {selectedMember.name} ({selectedMember.email})
@@ -703,6 +779,40 @@ export default function Members() {
               </div>
 
               <div className="overflow-y-auto flex-1 pr-1 flex flex-col gap-5 py-2">
+                {/* Department & Title Group */}
+                <div className="p-3.5 rounded-erp bg-surface2/60 border border-line flex flex-col gap-3">
+                  <div>
+                    <p className="font-semibold text-sm">{l("Departemen & Jabatan", "Department & Job Title")}</p>
+                    <p className="text-xs text-muted">
+                      {l(
+                        "Departemen digunakan untuk menentukan jalur persetujuan (Approver) saat anggota mengajukan akses ke topik terbatas.",
+                        "Department routes access requests to the corresponding Department Approver."
+                      )}
+                    </p>
+                  </div>
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    <label className="flex flex-col gap-1 text-xs">
+                      <span className="font-medium text-fg">{l("Departemen", "Department")}</span>
+                      <input
+                        className="input !py-1.5 text-sm font-normal bg-surface"
+                        list="member-departments-list"
+                        value={deptDraft}
+                        onChange={(e) => setDeptDraft(e.target.value)}
+                        placeholder={l("mis. Operasional, HR, Keuangan", "e.g. Operations, HR, Finance")}
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1 text-xs">
+                      <span className="font-medium text-fg">{l("Jabatan", "Job Title")}</span>
+                      <input
+                        className="input !py-1.5 text-sm font-normal bg-surface"
+                        value={titleDraft}
+                        onChange={(e) => setTitleDraft(e.target.value)}
+                        placeholder={l("mis. Staf Logistik, Kepala Cabang", "e.g. Logistics Staff, Branch Head")}
+                      />
+                    </label>
+                  </div>
+                </div>
+
                 {/* Business Roles Group */}
                 <div>
                   <div className="mb-2 flex items-center justify-between gap-2">
@@ -1059,6 +1169,11 @@ export default function Members() {
           </div>
         )}
       </AnimatePresence>
+      <datalist id="member-departments-list">
+        {existingDepartments.map((d) => (
+          <option key={d} value={d} />
+        ))}
+      </datalist>
     </Shell>
   );
 }

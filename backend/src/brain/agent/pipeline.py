@@ -180,18 +180,33 @@ class Pipeline:
         question: str,
         conversation_id: uuid.UUID | None = None,
         channel: str = "web",
+        document_ids: list[str] | None = None,
     ) -> AsyncIterator[Event]:
-        run = _Run(self, ctx, question.strip()[:2000], conversation_id, channel)
+        run = _Run(
+            self,
+            ctx,
+            question.strip()[:2000],
+            conversation_id,
+            channel,
+            document_ids=document_ids,
+        )
         async for ev in run.go():
             yield ev
 
 
 class _Run:
     def __init__(
-        self, p: Pipeline, ctx: RequestContext, question: str, conversation_id, channel: str
+        self,
+        p: Pipeline,
+        ctx: RequestContext,
+        question: str,
+        conversation_id,
+        channel: str,
+        document_ids: list[str] | None = None,
     ):
         self.p, self.ctx, self.q, self.channel = p, ctx, question, channel
         self.conversation_id = conversation_id
+        self.document_ids = [d.strip() for d in (document_ids or []) if d and d.strip()][:10]
         self.query_id = uuid.uuid4()
         self.t0 = time.monotonic()
         self.steps: list[_Step] = []
@@ -498,6 +513,8 @@ class _Run:
         queries = [self.q, *[x for x in und.search_queries if x.strip() and x != self.q]][:3]
         types = set(und.source_types or ["chat", "doc", "task"])
         jobs = []
+        for doc_id in self.document_ids:
+            jobs.append(r.get_item(doc_id))
         for query in queries[:2]:
             if "chat" in types:
                 jobs.append(r.search_messages(query, und.entities or None, limit=6))
@@ -521,7 +538,11 @@ class _Run:
     def _evidence_hits(self) -> list[Hit]:
         uniq = {h.citation_id: h for h in self.retriever.seen.values()}
         profile = uniq.pop(COMPANY_PROFILE_ID, None)
-        top = sorted(uniq.values(), key=lambda h: (-h.score, h.citation_id))[:MAX_EVIDENCE_HITS]
+        tagged = {d.split("#")[0] for d in self.document_ids}
+        top = sorted(
+            uniq.values(),
+            key=lambda h: (0 if h.item_id in tagged else 1, -h.score, h.citation_id),
+        )[:MAX_EVIDENCE_HITS]
         return top + [profile] if profile else top
 
     def _allowed_texts(self) -> dict[str, str]:

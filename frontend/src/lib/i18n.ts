@@ -3,7 +3,7 @@ import { useSession } from "@/store/session";
 
 const D = {
   id: {
-    chat: "Tanya Havi", approvals: "Persetujuan", members: "Anggota", containers: "Container & Izin",
+    chat: "Tanya Havi", approvals: "Persetujuan", company: "Pengaturan Perusahaan", members: "Anggota", containers: "Container & Izin",
     documents: "Dokumen", integrations: "Integrasi", managers: "Approver", topics: "Pemilik Topik", pii: "Izin Data Pribadi", invites: "Undangan", upload: "Upload Data", audit: "Audit Log", tests: "Uji Sistem",
     workbuddy: "Hubungkan WorkBuddy", logout: "Keluar", send: "Kirim", placeholder: "Tulis pertanyaan… (ID / EN / campur)",
     dataAsOf: "Data per", sources: "Sumber", trace: "Jejak proses", approve: "Setujui", reject: "Tolak",
@@ -13,7 +13,7 @@ const D = {
     suggestions: "Coba tanyakan",
   },
   en: {
-    chat: "Ask Havi", approvals: "Approvals", members: "Members", containers: "Containers & Access",
+    chat: "Ask Havi", approvals: "Approvals", company: "Company Settings", members: "Members", containers: "Containers & Access",
     documents: "Documents", integrations: "Integrations", managers: "Approvers", topics: "Topic Owners", pii: "PII Access", invites: "Invites", upload: "Upload Data", audit: "Audit Log", tests: "System Tests",
     workbuddy: "Connect WorkBuddy", logout: "Log out", send: "Send", placeholder: "Type a question… (ID / EN / mixed)",
     dataAsOf: "Data as of", sources: "Sources", trace: "Process trace", approve: "Approve", reject: "Reject",

@@ -30,3 +30,17 @@ export function Readers({ folder }: { folder?: FolderOut }) {
     return <span className="text-bad inline-flex items-center gap-1"><FolderLock size={13} /> {l("Belum bisa dibaca siapa pun", "Nobody can read this yet")}</span>;
   return <span className="text-muted">{l("Bisa dibaca", "Readable by")}: {folder.role_names.join(", ")}</span>;
 }
+
+/** Clean up indexed chunk text so numbered/bulleted lists stay on neat separate lines. */
+export function formatChunkText(raw: string): string {
+  if (!raw) return "";
+  return (
+    raw
+      // Rejoin standalone list numbers that got split onto their own line ("1.\n\nabc" -> "1. abc")
+      .replace(/(^|\n)(\d{1,3}[.)])\s*\n+\s*(?=\S)/g, "$1$2 ")
+      // Put inline numbered items onto a new line ("1. abc. 2. def" -> "1. abc.\n2. def")
+      .replace(/([.!?;:])\s+(\d{1,2}\.\s+\S)/g, "$1\n$2")
+      // Collapse excessive blank lines between consecutive numbered list items
+      .replace(/(^|\n)(\d{1,3}\.\s+[^\n]+)\n\n+(?=\d{1,3}\.\s+)/g, "$1$2\n")
+  );
+}

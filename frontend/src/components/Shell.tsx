@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { MessageSquare, CheckSquare, Users, Shield, Plug, Upload, ScrollText, FlaskConical, LogOut, Settings, FolderOpen, UserPlus, UserCog, User, ChevronDown, BookOpen, EyeOff } from "lucide-react";
+import { MessageSquare, CheckSquare, Users, Shield, Plug, Upload, ScrollText, FlaskConical, LogOut, Settings, FolderOpen, UserPlus, UserCog, User, ChevronDown, BookOpen, EyeOff, Building2 } from "lucide-react";
 import { useSession, usePersona, useTenants } from "@/store/session";
 import { can, NAV, NAV_SECTIONS } from "@/lib/permissions";
 import { motion } from "framer-motion";
@@ -12,7 +12,7 @@ import { KnowhavenLogo, WorkBuddyLogo } from "@/components/BrandLogos";
 import { Launcher, Palette } from "@/components/Extras";
 
 const ICON: Record<string, React.ReactNode> = {
-  chat: <MessageSquare size={18} />, approvals: <CheckSquare size={18} />, members: <Users size={18} />,
+  chat: <MessageSquare size={18} />, approvals: <CheckSquare size={18} />, company: <Building2 size={18} />, members: <Users size={18} />,
   containers: <Shield size={18} />, integrations: <Plug size={18} />, upload: <Upload size={18} />,
   audit: <ScrollText size={18} />, tests: <FlaskConical size={18} />, workbuddy: <WorkBuddyLogo size={18} />,
   settings: <Settings size={18} />, documents: <FolderOpen size={18} />,

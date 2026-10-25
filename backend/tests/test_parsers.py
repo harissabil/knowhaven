@@ -107,6 +107,30 @@ def test_split_long_keeps_paragraphs():
     assert "".join(parts).count("Paragraf") == 10
 
 
+def test_split_long_preserves_numbered_lists():
+    items = [f"{i}. Langkah prosedur nomor {i} untuk operasional gudang." for i in range(1, 25)]
+    text = "\n".join(items)
+    parts = split_long(text, 400)
+    assert len(parts) > 1
+    combined_lines = [ln for p in parts for ln in p.splitlines() if ln.strip()]
+    assert combined_lines == items
+
+
+def test_docx_numbered_list_preservation():
+    from docx import Document
+
+    d = Document()
+    d.add_heading("SOP Gudang", level=1)
+    d.add_paragraph("abc", style="List Number")
+    d.add_paragraph("def", style="List Number")
+    d.add_paragraph("ghi", style="List Number")
+    buf = io.BytesIO()
+    d.save(buf)
+    title, sections = documents.parse_docx(buf.getvalue())
+    assert title == "SOP Gudang"
+    assert sections[0].text.splitlines() == ["1. abc", "2. def", "3. ghi"]
+
+
 def test_docx_headings_and_tables():
     from docx import Document
 

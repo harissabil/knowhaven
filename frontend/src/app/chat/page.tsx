@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Send,
@@ -15,26 +15,33 @@ import {
   Clock,
   Sparkles,
   AlertTriangle,
-  RotateCcw,
   X,
   Download,
   ExternalLink,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Plus,
+  AtSign,
+  MessageSquare,
 } from "lucide-react";
 import { Shell } from "@/components/Shell";
 import { Mascot, type MascotState } from "@/components/mascot/Mascot";
+import { FileIcon, formatChunkText, relTime } from "@/components/documents";
 import { SUGGESTIONS } from "@/mock/chat";
 import { useL, useT } from "@/lib/i18n";
 import { useSession } from "@/store/session";
 import { apiStream, apiFetch, errorText, type CitationItem, type FinalEventData, type TraceEventData } from "@/lib/api";
-import type { ConversationOut, MessageOut, SourceOut } from "@/lib/contracts";
+import type { ConversationOut, DocumentOut, MessageOut, SourceOut } from "@/lib/contracts";
 import { toast } from "@/components/ui/Toast";
 
 interface Msg {
   role: "user" | "bot";
   text: string;
   question?: string;
+  taggedDocs?: { id: string; title: string }[];
   final?: FinalEventData;
   traces?: TraceEventData[];
+  traceLoading?: boolean;
   error?: string;
   at: string;
   streaming?: boolean;
@@ -71,6 +78,11 @@ export default function Chat() {
   const l = useL();
   const lang = useSession((s) => s.lang);
   const tenantId = useSession((s) => s.tenantId);
+  const storedConvId = useSession((s) => (s.tenantId ? s.activeConversations?.[s.tenantId] : undefined));
+  const setActiveConversation = useSession((s) => s.setActiveConversation);
+
+  const [convs, setConvs] = useState<ConversationOut[]>([]);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [q, setQ] = useState("");
   const [state, setState] = useState<MascotState>("idle");
@@ -78,52 +90,219 @@ export default function Chat() {
   const [openTraceIdx, setOpenTraceIdx] = useState<number | null>(null);
   const [accessRequestedFor, setAccessRequestedFor] = useState<Record<number, boolean>>({});
   const [busy, setBusy] = useState(false);
+
+  // Document tagging (@) state
+  const [docs, setDocs] = useState<DocumentOut[]>([]);
+  const [taggedDocs, setTaggedDocs] = useState<DocumentOut[]>([]);
+  const [mentionMatch, setMentionMatch] = useState<{ start: number; end: number; query: string } | null>(null);
+  const [mentionIdx, setMentionIdx] = useState(0);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<(() => void) | null>(null);
 
-  const fmt = (iso: string | Date) => new Date(iso).toLocaleString(lang === "id" ? "id-ID" : "en-US");
+  const fmt = useCallback(
+    (iso: string | Date) => new Date(iso).toLocaleString(lang === "id" ? "id-ID" : "en-US"),
+    [lang],
+  );
 
-  // Resume the latest web conversation of this tenant (history lives on the server).
+  // Load readable documents for @ tagging and ?docs=... query param
   useEffect(() => {
+    if (!tenantId) return;
     let cancelled = false;
-    setMsgs([]);
-    setConversationId(null);
+    apiFetch<DocumentOut[]>("/api/documents")
+      .then((all) => {
+        if (cancelled) return;
+        const readable = all.filter((d) => d.can_read);
+        setDocs(readable);
+        const params = new URLSearchParams(window.location.search);
+        const docsParam = params.get("docs");
+        if (docsParam) {
+          const wantedIds = docsParam
+            .split(",")
+            .map((x) => decodeURIComponent(x.trim()))
+            .filter(Boolean);
+          const matched = readable.filter((d) => wantedIds.includes(d.id));
+          if (matched.length > 0) {
+            setTaggedDocs((prev) => {
+              const existing = new Set(prev.map((p) => p.id));
+              return [...prev, ...matched.filter((m) => !existing.has(m.id))];
+            });
+            setTimeout(() => inputRef.current?.focus(), 50);
+          }
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [tenantId]);
+
+  const loadConversationMessages = useCallback(
+    async (convId: string) => {
+      const history = await apiFetch<MessageOut[]>(`/api/conversations/${convId}`);
+      setConversationId(convId);
+      setOpenTraceIdx(null);
+      setMsgs(
+        history.map((m): Msg =>
+          m.role === "user"
+            ? { role: "user", text: m.content, at: fmt(m.created_at) }
+            : {
+                role: "bot",
+                text: m.content,
+                at: fmt(m.created_at),
+                queryId: m.query_id,
+                final: {
+                  query_id: m.query_id ?? "",
+                  conversation_id: convId,
+                  answer: m.content,
+                  decision_path: (m.decision_path ?? "answer") as FinalEventData["decision_path"],
+                  citations: m.sources.map((c) => ({ ...c, url: null })),
+                  conflicts: [],
+                  stale_doc_ids: [],
+                  access_offer: null,
+                  notes: [],
+                  action_draft_ids: [],
+                  data_as_of: null,
+                  latency_ms: 0,
+                },
+              },
+        ),
+      );
+    },
+    [fmt],
+  );
+
+  // Load conversations list and restore active conversation for this session (defaults to latest on login)
+  useEffect(() => {
+    if (!tenantId) return;
+    let cancelled = false;
     (async () => {
       try {
-        const convs = await apiFetch<ConversationOut[]>("/api/conversations");
-        const last = convs.find((c) => c.channel === "web");
-        if (!last || cancelled) return;
-        const history = await apiFetch<MessageOut[]>(`/api/conversations/${last.id}`);
+        const allConvs = await apiFetch<ConversationOut[]>("/api/conversations");
+        const webConvs = allConvs.filter((c) => c.channel === "web");
         if (cancelled) return;
-        setConversationId(last.id);
-        setMsgs(history.map((m): Msg => m.role === "user"
-          ? { role: "user", text: m.content, at: fmt(m.created_at) }
-          : {
-              role: "bot", text: m.content, at: fmt(m.created_at), queryId: m.query_id,
-              final: {
-                query_id: m.query_id ?? "", conversation_id: last.id, answer: m.content,
-                decision_path: (m.decision_path ?? "answer") as FinalEventData["decision_path"],
-                citations: m.sources.map((c) => ({ ...c, url: null })), conflicts: [], stale_doc_ids: [],
-                access_offer: null, notes: [], action_draft_ids: [], data_as_of: null, latency_ms: 0,
-              },
-            }));
+        setConvs(webConvs);
+
+        const desired = useSession.getState().activeConversations?.[tenantId];
+        if (desired === "new") {
+          setConversationId(null);
+          setMsgs([]);
+          return;
+        }
+        const target =
+          (desired ? webConvs.find((c) => c.id === desired) : undefined) ?? webConvs[0];
+        if (!target) {
+          setConversationId(null);
+          setMsgs([]);
+          return;
+        }
+        setActiveConversation(tenantId, target.id);
+        await loadConversationMessages(target.id);
       } catch {
         // no history is fine
       }
     })();
-    return () => { cancelled = true; abortRef.current?.(); };
+    return () => {
+      cancelled = true;
+      abortRef.current?.();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantId]);
+
+  const handleSelectConversation = async (convId: string) => {
+    if (busy || convId === conversationId) return;
+    abortRef.current?.();
+    if (tenantId) setActiveConversation(tenantId, convId);
+    setState("idle");
+    try {
+      await loadConversationMessages(convId);
+    } catch (e) {
+      toast(l(`Gagal memuat percakapan: ${errorText(e)}`, `Could not load conversation: ${errorText(e)}`));
+    }
+  };
+
+  const handleNewChat = () => {
+    if (busy) return;
+    abortRef.current?.();
+    setMsgs([]);
+    setConversationId(null);
+    setOpenTraceIdx(null);
+    setState("idle");
+    if (tenantId) setActiveConversation(tenantId, "new");
+    inputRef.current?.focus();
+  };
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [msgs, state]);
 
-  // "Ask Havi" from a document page pre-fills the question.
+  // "Ask Havi" pre-filled question query param if present
   useEffect(() => {
     const pre = new URLSearchParams(window.location.search).get("q");
     if (pre) setQ(pre.slice(0, 2000));
   }, []);
+
+  // @ mention matching
+  const filteredMentionDocs = useMemo(() => {
+    if (!mentionMatch) return [];
+    const needle = mentionMatch.query.toLowerCase();
+    const taggedSet = new Set(taggedDocs.map((d) => d.id));
+    return docs
+      .filter(
+        (d) =>
+          !taggedSet.has(d.id) &&
+          (!needle ||
+            (d.title ?? "").toLowerCase().includes(needle) ||
+            d.filename.toLowerCase().includes(needle) ||
+            d.folder_name.toLowerCase().includes(needle) ||
+            d.id.toLowerCase().includes(needle)),
+      )
+      .slice(0, 8);
+  }, [mentionMatch, docs, taggedDocs]);
+
+  const detectMention = (value: string, cursor: number) => {
+    const before = value.slice(0, cursor);
+    const m = /(?:^|\s)@([^\s@]*)$/.exec(before);
+    if (!m) {
+      setMentionMatch(null);
+      return;
+    }
+    const query = m[1];
+    const start = cursor - query.length - 1;
+    setMentionMatch({ start, end: cursor, query });
+    setMentionIdx(0);
+  };
+
+  const selectMentionDoc = (doc: DocumentOut) => {
+    if (mentionMatch) {
+      const nextQ = (q.slice(0, mentionMatch.start) + q.slice(mentionMatch.end)).replace(/\s{2,}/g, " ");
+      setQ(nextQ);
+    }
+    setTaggedDocs((prev) => (prev.some((d) => d.id === doc.id) ? prev : [...prev, doc]));
+    setMentionMatch(null);
+    setTimeout(() => inputRef.current?.focus(), 10);
+  };
+
+  const removeTaggedDoc = (docId: string) => {
+    setTaggedDocs((prev) => prev.filter((d) => d.id !== docId));
+  };
+
+  const openMentionPicker = () => {
+    const el = inputRef.current;
+    if (!el) return;
+    if (mentionMatch) {
+      setMentionMatch(null);
+      return;
+    }
+    const next = q.endsWith(" ") || !q ? `${q}@` : `${q} @`;
+    setQ(next);
+    detectMention(next, next.length);
+    setTimeout(() => {
+      el.focus();
+      el.setSelectionRange(next.length, next.length);
+    }, 10);
+  };
 
   const [preview, setPreview] = useState<{ id: string; data?: SourceOut; missing?: boolean } | null>(null);
   async function openSource(id: string) {
@@ -135,20 +314,33 @@ export default function Chat() {
     }
   }
 
+  const patchMsg = (idx: number, p: Partial<Msg> | ((m: Msg) => Partial<Msg>)) =>
+    setMsgs((prev) => prev.map((m, i) => (i === idx ? { ...m, ...(typeof p === "function" ? p(m) : p) } : m)));
+
   async function toggleTrace(i: number, m: Msg) {
-    setOpenTraceIdx(openTraceIdx === i ? null : i);
-    if (m.queryId && !m.traces?.length) {
+    const nextOpen = openTraceIdx === i ? null : i;
+    setOpenTraceIdx(nextOpen);
+    const qid = m.queryId || m.final?.query_id;
+    if (nextOpen === i && qid && !m.traces?.length && !m.traceLoading) {
+      patchMsg(i, { traceLoading: true });
       try {
-        const steps = await apiFetch<{ step: number; label: string; name: string; ms: number | null; summary: string | null }[]>(`/api/queries/${m.queryId}/trace`);
-        patchMsg(i, { traces: steps.map((x) => ({ step: x.step, label: x.label, name: x.name, status: "done", ms: x.ms ?? undefined, summary: x.summary ?? undefined })) });
+        const steps = await apiFetch<{ step: number; label: string; name: string; ms: number | null; summary: string | null }[]>(`/api/queries/${qid}/trace`);
+        patchMsg(i, {
+          traceLoading: false,
+          traces: steps.map((x) => ({
+            step: x.step,
+            label: x.label,
+            name: x.name,
+            status: "done",
+            ms: x.ms ?? undefined,
+            summary: x.summary ?? undefined,
+          })),
+        });
       } catch {
-        // no trace stored for this message; the header just stays empty
+        patchMsg(i, { traceLoading: false });
       }
     }
   }
-
-  const patchMsg = (idx: number, p: Partial<Msg> | ((m: Msg) => Partial<Msg>)) =>
-    setMsgs((prev) => prev.map((m, i) => (i === idx ? { ...m, ...(typeof p === "function" ? p(m) : p) } : m)));
 
   async function handleRequestAccess(msgIdx: number, final: FinalEventData, questionText?: string) {
     if (!final.access_offer) return;
@@ -171,23 +363,47 @@ export default function Chat() {
   }
 
   function ask(text: string) {
-    if (!text.trim() || busy) return;
+    const cleanText = text.trim();
+    if ((!cleanText && taggedDocs.length === 0) || busy) return;
+    const effectiveQuestion =
+      cleanText ||
+      (lang === "id"
+        ? `Ringkas dokumen ${taggedDocs.map((d) => `"${d.title || d.filename}"`).join(", ")}`
+        : `Summarize the document(s) ${taggedDocs.map((d) => `"${d.title || d.filename}"`).join(", ")}`);
+    const currentTagged = [...taggedDocs];
+    const docIds = currentTagged.map((d) => d.id);
+
     setBusy(true);
     setQ("");
+    setMentionMatch(null);
+    setTaggedDocs([]);
     setState("thinking");
 
     const now = fmt(new Date());
     let botIdx = 0;
     setMsgs((m) => {
       botIdx = m.length + 1;
-      return [...m, { role: "user", text, at: now }, { role: "bot", text: "", question: text, at: now, streaming: true, traces: [] }];
+      return [
+        ...m,
+        {
+          role: "user",
+          text: effectiveQuestion,
+          taggedDocs: currentTagged.map((d) => ({ id: d.id, title: d.title || d.filename })),
+          at: now,
+        },
+        { role: "bot", text: "", question: effectiveQuestion, at: now, streaming: true, traces: [] },
+      ];
     });
 
     let draft = "";
     const traces = new Map<number, TraceEventData>();
     const { abort } = apiStream(
       "/api/chat",
-      { question: text, conversation_id: conversationId ?? undefined },
+      {
+        question: effectiveQuestion,
+        conversation_id: conversationId ?? undefined,
+        document_ids: docIds.length > 0 ? docIds : undefined,
+      },
       {
         onTrace: (trace) => {
           traces.set(trace.step, trace); // "running" then "done" for the same step
@@ -205,17 +421,23 @@ export default function Chat() {
         },
         onFinal: (final) => {
           setConversationId(final.conversation_id);
+          if (tenantId) setActiveConversation(tenantId, final.conversation_id);
           setState(moodOf(final));
           patchMsg(botIdx, {
             text: final.answer || draft,
             final,
+            queryId: final.query_id,
             streaming: false,
             at: final.data_as_of ? fmt(final.data_as_of) : now,
           });
+          // Refresh conversation list so a newly created conversation appears in the sidebar
+          apiFetch<ConversationOut[]>("/api/conversations")
+            .then((all) => setConvs(all.filter((c) => c.channel === "web")))
+            .catch(() => {});
         },
         onError: (err) => {
           setState("idk");
-          patchMsg(botIdx, { error: err.message, streaming: false });
+          patchMsg(botIdx, { error: err.message, queryId: err.query_id, streaming: false });
         },
         onClose: () => {
           patchMsg(botIdx, { streaming: false });
@@ -229,227 +451,496 @@ export default function Chat() {
 
   return (
     <Shell fullBleed title={t("chat")}>
-      <div className="flex-1 flex flex-col h-full min-h-0 w-full bg-bg">
-        {/* Messages scroll area */}
-        <div className="flex-1 overflow-y-auto px-4 md:px-8 py-6 flex flex-col scroll-smooth">
-          <div className="max-w-4xl mx-auto w-full flex-1 flex flex-col gap-5">
-            {msgs.length === 0 && (
-              <div className="flex-1 flex flex-col items-center justify-center gap-3 py-16 text-center max-w-xl mx-auto my-auto">
-                <Mascot size={140} state={state} />
-                <p className="text-2xl font-semibold mt-2">{t("welcome")}</p>
-                <p className="text-sm text-muted">{t("suggestions")}:</p>
-                <div className="flex flex-wrap gap-2.5 justify-center mt-2">
-                  {SUGGESTIONS[lang].map((s) => (
-                    <button
-                      key={s}
-                      className="btn hover:border-brand hover:text-brand transition-colors text-sm py-2 px-3.5"
-                      onClick={() => ask(s)}
-                    >
-                      {s}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {msgs.length > 0 && (
-              <div className="flex justify-end">
-                <button className="btn text-xs" disabled={busy}
-                  onClick={() => { setMsgs([]); setConversationId(null); setState("idle"); }}>
-                  <RotateCcw size={13} /> {l("Percakapan baru", "New conversation")}
+      <div className="flex-1 flex h-full min-h-0 w-full bg-bg overflow-hidden relative">
+        {/* Collapsible Chat History Sidebar */}
+        <AnimatePresence initial={false}>
+          {sidebarOpen && (
+            <motion.aside
+              key="chat-history-sidebar"
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: 272, opacity: 1 }}
+              exit={{ width: 0, opacity: 0 }}
+              transition={{ duration: 0.22, ease: "easeInOut" }}
+              className="shrink-0 h-full border-r border-line bg-surface flex flex-col overflow-hidden"
+            >
+              <div className="p-3 border-b border-line flex items-center justify-between gap-2 min-w-[272px]">
+                <button
+                  type="button"
+                  onClick={handleNewChat}
+                  disabled={busy}
+                  className="btn btn-primary !py-1.5 !px-3 text-xs flex-1 justify-center"
+                >
+                  <Plus size={15} /> {l("Percakapan Baru", "New Chat")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSidebarOpen(false)}
+                  className="btn !p-1.5 text-muted hover:text-fg"
+                  title={l("Sembunyikan riwayat", "Collapse history")}
+                  aria-label={l("Sembunyikan riwayat", "Collapse history")}
+                >
+                  <PanelLeftClose size={16} />
                 </button>
               </div>
-            )}
 
-            {msgs.map((m, i) => {
-              const isBot = m.role === "bot";
-              const isTraceOpen = openTraceIdx === i;
-              const f = m.final;
-              const conflict = f?.conflicts[0];
-              const cites: CitationItem[] = f?.citations ?? [];
+              <div className="px-3.5 pt-3 pb-1 text-[0.7rem] font-semibold uppercase tracking-wider text-muted/70 min-w-[272px]">
+                {l("Riwayat Percakapan", "Chat History")} ({convs.length})
+              </div>
 
-              return (
-                <motion.div
-                  key={i}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3 }}
-                  className={`flex gap-3.5 ${m.role === "user" ? "justify-end" : "justify-start"}`}
+              <div className="flex-1 overflow-y-auto p-2 flex flex-col gap-1 min-w-[272px]">
+                {convs.map((c) => {
+                  const active = c.id === conversationId && storedConvId !== "new";
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      disabled={busy}
+                      onClick={() => handleSelectConversation(c.id)}
+                      className={`w-full text-left px-3 py-2.5 rounded-erp text-sm transition-colors flex items-start gap-2.5 ${
+                        active
+                          ? "bg-tint text-brand font-medium border border-brand/25"
+                          : "text-fg hover:bg-surface2 border border-transparent"
+                      }`}
+                    >
+                      <MessageSquare size={15} className={`mt-0.5 shrink-0 ${active ? "text-brand" : "text-muted"}`} />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate leading-snug">
+                          {c.title || l("Percakapan tanpa judul", "Untitled conversation")}
+                        </p>
+                        <p className="text-[11px] text-muted mt-0.5">{relTime(c.created_at, lang)}</p>
+                      </div>
+                    </button>
+                  );
+                })}
+                {convs.length === 0 && (
+                  <p className="text-xs text-muted px-3 py-6 text-center">
+                    {l("Belum ada riwayat percakapan.", "No conversations yet.")}
+                  </p>
+                )}
+              </div>
+            </motion.aside>
+          )}
+        </AnimatePresence>
+
+        {/* Main Chat Area */}
+        <div className="flex-1 flex flex-col h-full min-h-0 min-w-0 bg-bg">
+          {/* Top bar when sidebar is collapsed or active chat info */}
+          <div className="shrink-0 px-4 md:px-6 py-2 border-b border-line/60 bg-surface/50 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              {!sidebarOpen && (
+                <button
+                  type="button"
+                  onClick={() => setSidebarOpen(true)}
+                  className="btn !py-1 !px-2 text-xs text-muted hover:text-fg"
+                  title={l("Buka riwayat percakapan", "Open chat history")}
                 >
-                  {isBot && (
-                    <div className="shrink-0 mt-0.5">
-                      <Mascot size={46} state={f ? moodOf(f) : m.streaming ? "thinking" : "idle"} />
-                    </div>
-                  )}
-                  <div
-                    className={`max-w-[85%] md:max-w-[80%] p-4 rounded-erp shadow-xs flex flex-col gap-2 ${
-                      m.role === "user" ? "bg-surface2 border border-line2" : "border border-line bg-surface"
-                    }`}
-                  >
-                    {/* Pipeline trace badge header */}
-                    {isBot && ((m.traces && m.traces.length > 0) || m.queryId) && (
-                      <div className="border-b border-line/60 pb-2 mb-1">
-                        <button
-                          type="button"
-                          onClick={() => toggleTrace(i, m)}
-                          className="flex items-center gap-1.5 text-xs text-muted hover:text-brand font-mono transition-colors"
-                        >
-                          <Activity size={13} className={`text-brand ${m.streaming ? "animate-pulse" : ""}`} />
-                          <span>
-                            {l("Pipeline 8 langkah", "8-step pipeline")} {m.traces?.length ? `(${m.traces.filter((tr) => tr.status === "done").length}/8)` : ""}
-                            {f?.latency_ms ? ` · ${(f.latency_ms / 1000).toFixed(1)} s` : ""}
-                          </span>
-                          {isTraceOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                        </button>
+                  <PanelLeftOpen size={15} />
+                  <span className="hidden sm:inline">{l("Riwayat", "History")}</span>
+                </button>
+              )}
+              <span className="text-xs text-muted truncate">
+                {conversationId
+                  ? convs.find((c) => c.id === conversationId)?.title || l("Percakapan aktif", "Active conversation")
+                  : l("Percakapan baru", "New conversation")}
+              </span>
+            </div>
 
-                        <AnimatePresence>
-                          {isTraceOpen && !!m.traces?.length && (
-                            <motion.div
-                              initial={{ opacity: 0, height: 0 }}
-                              animate={{ opacity: 1, height: "auto" }}
-                              exit={{ opacity: 0, height: 0 }}
-                              className="overflow-hidden mt-2 flex flex-col gap-1 bg-surface2/60 p-2.5 rounded-erp font-mono text-[0.75rem]"
-                            >
-                              {m.traces!.map((tr) => (
-                                <div key={tr.step} className="flex items-center gap-2 text-muted" title={tr.summary}>
-                                  <span className="w-4 text-center">{tr.step}</span>
-                                  <span className="px-1.5 py-0.5 rounded bg-surface border border-line text-[0.65rem] font-semibold text-fg">
-                                    {tr.label}
-                                  </span>
-                                  <span className="flex-1 truncate">{tr.name}{tr.summary ? ` · ${tr.summary}` : ""}</span>
-                                  {tr.status === "done" ? (
-                                    <span className="text-ok flex items-center gap-1">
-                                      <CheckCircle2 size={11} />
-                                      {tr.ms !== undefined ? `${tr.ms}ms` : "ok"}
-                                    </span>
-                                  ) : (
-                                    <span className="text-warn flex items-center gap-1">
-                                      <Clock size={11} className="animate-spin" /> running
-                                    </span>
-                                  )}
-                                </div>
-                              ))}
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
+            {msgs.length > 0 && (
+              <button
+                type="button"
+                className="btn !py-1 !px-2.5 text-xs"
+                disabled={busy}
+                onClick={handleNewChat}
+              >
+                <Plus size={13} /> {l("Percakapan baru", "New chat")}
+              </button>
+            )}
+          </div>
+
+          {/* Messages scroll area */}
+          <div className="flex-1 overflow-y-auto px-4 md:px-8 py-6 flex flex-col scroll-smooth">
+            <div className="max-w-4xl mx-auto w-full flex-1 flex flex-col gap-5">
+              {msgs.length === 0 && (
+                <div className="flex-1 flex flex-col items-center justify-center gap-3 py-12 text-center max-w-xl mx-auto my-auto">
+                  <Mascot size={140} state={state} />
+                  <p className="text-2xl font-semibold mt-2">{t("welcome")}</p>
+                  <p className="text-sm text-muted">
+                    {l(
+                      "Ketik @ di kolom pesan untuk menandai dokumen tertentu, atau pilih pertanyaan contoh:",
+                      "Type @ in the message box to tag specific documents, or try a starter question:",
+                    )}
+                  </p>
+                  <div className="flex flex-wrap gap-2.5 justify-center mt-2">
+                    {SUGGESTIONS[lang].map((s) => (
+                      <button
+                        key={s}
+                        className="btn hover:border-brand hover:text-brand transition-colors text-sm py-2 px-3.5"
+                        onClick={() => ask(s)}
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {msgs.map((m, i) => {
+                const isBot = m.role === "bot";
+                const isTraceOpen = openTraceIdx === i;
+                const f = m.final;
+                const conflict = f?.conflicts[0];
+                const cites: CitationItem[] = f?.citations ?? [];
+                const hasTrace = Boolean(m.streaming || (m.traces && m.traces.length > 0) || m.queryId || f?.query_id);
+
+                return (
+                  <motion.div
+                    key={i}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3 }}
+                    className={`flex gap-3.5 ${m.role === "user" ? "justify-end" : "justify-start"}`}
+                  >
+                    {isBot && (
+                      <div className="shrink-0 mt-0.5">
+                        <Mascot size={46} state={f ? moodOf(f) : m.streaming ? "thinking" : "idle"} />
                       </div>
                     )}
+                    <div
+                      className={`max-w-[85%] md:max-w-[80%] p-4 rounded-erp shadow-xs flex flex-col gap-2 ${
+                        m.role === "user" ? "bg-surface2 border border-line2" : "border border-line bg-surface"
+                      }`}
+                    >
+                      {/* Tagged document pills on user messages */}
+                      {!isBot && m.taggedDocs && m.taggedDocs.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mb-0.5">
+                          {m.taggedDocs.map((doc) => (
+                            <button
+                              key={doc.id}
+                              type="button"
+                              onClick={() => openSource(doc.id)}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-tint text-brand border border-brand/30 hover:border-brand"
+                            >
+                              <FileText size={11} /> @{doc.title}
+                            </button>
+                          ))}
+                        </div>
+                      )}
 
-                    {/* Answer content */}
-                    {isBot && m.streaming && !m.text ? (
-                      <p className="text-sm text-muted animate-pulse flex items-center gap-2">
-                        <Sparkles size={15} className="text-brand" /> {l("Havi sedang menyusun jawaban…", "Havi is composing answer…")}
+                      {/* Pipeline trace badge header */}
+                      {isBot && hasTrace && (
+                        <div className="border-b border-line/60 pb-2 mb-1">
+                          <button
+                            type="button"
+                            onClick={() => toggleTrace(i, m)}
+                            className="flex items-center gap-1.5 text-xs text-muted hover:text-brand font-mono transition-colors"
+                          >
+                            <Activity size={13} className={`text-brand ${m.streaming || m.traceLoading ? "animate-pulse" : ""}`} />
+                            <span>
+                              {l("Pipeline 8 langkah", "8-step pipeline")}{" "}
+                              {m.traces?.length ? `(${m.traces.filter((tr) => tr.status === "done").length}/8)` : ""}
+                              {f?.latency_ms ? ` · ${(f.latency_ms / 1000).toFixed(1)} s` : ""}
+                            </span>
+                            {isTraceOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                          </button>
+
+                          <AnimatePresence>
+                            {isTraceOpen && (
+                              <motion.div
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: "auto" }}
+                                exit={{ opacity: 0, height: 0 }}
+                                className="overflow-hidden mt-2 flex flex-col gap-1 bg-surface2/60 p-2.5 rounded-erp font-mono text-[0.75rem]"
+                              >
+                                {m.traceLoading && (!m.traces || m.traces.length === 0) && (
+                                  <div className="text-muted animate-pulse py-1">
+                                    {l("Memuat jejak proses…", "Loading process trace…")}
+                                  </div>
+                                )}
+                                {!m.traceLoading && (!m.traces || m.traces.length === 0) && (
+                                  <div className="text-muted py-1">
+                                    {l("Jejak proses tidak tersedia untuk pesan ini.", "Process trace unavailable for this message.")}
+                                  </div>
+                                )}
+                                {m.traces?.map((tr) => (
+                                  <div key={tr.step} className="flex items-center gap-2 text-muted" title={tr.summary}>
+                                    <span className="w-4 text-center">{tr.step}</span>
+                                    <span className="px-1.5 py-0.5 rounded bg-surface border border-line text-[0.65rem] font-semibold text-fg">
+                                      {tr.label}
+                                    </span>
+                                    <span className="flex-1 truncate">{tr.name}{tr.summary ? ` · ${tr.summary}` : ""}</span>
+                                    {tr.status === "done" ? (
+                                      <span className="text-ok flex items-center gap-1">
+                                        <CheckCircle2 size={11} />
+                                        {tr.ms !== undefined ? `${tr.ms}ms` : "ok"}
+                                      </span>
+                                    ) : (
+                                      <span className="text-warn flex items-center gap-1">
+                                        <Clock size={11} className="animate-spin" /> running
+                                      </span>
+                                    )}
+                                  </div>
+                                ))}
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
+                      )}
+
+                      {/* Answer content */}
+                      {isBot && m.streaming && !m.text ? (
+                        <p className="text-sm text-muted animate-pulse flex items-center gap-2">
+                          <Sparkles size={15} className="text-brand" /> {l("Havi sedang menyusun jawaban…", "Havi is composing answer…")}
+                        </p>
+                      ) : (
+                        m.text && (
+                          <p className="leading-relaxed text-[0.98rem] whitespace-pre-wrap">
+                            {render(m.text)}
+                            {m.streaming && <span className="inline-block w-[2px] h-4 bg-fg align-middle ml-1 animate-pulse" />}
+                          </p>
+                        )
+                      )}
+
+                      {m.error && (
+                        <p role="alert" className="text-sm text-bad flex items-center gap-2">
+                          <AlertTriangle size={14} /> {l("Gagal mendapat jawaban: ", "Could not get an answer: ")}{m.error}
+                        </p>
+                      )}
+
+                      {/* Rich cards: conflicts, notes, access, citations */}
+                      {!m.streaming && f && (
+                        <>
+                          {conflict && (
+                            <div className="mt-2 p-2.5 rounded-erp border border-warn/40 bg-warn/5 flex gap-2 text-warn text-sm">
+                              <Scale size={16} className="shrink-0 mt-0.5" />
+                              <div>
+                                <b>{l("Konflik sumber", "Source conflict")}:</b> {conflict.reason}
+                                {conflict.chosen && (
+                                  <p className="text-xs text-muted mt-1">
+                                    {l("Dipakai", "Used")}: <i>{conflict.chosen.value} · {conflict.chosen.source} ({conflict.chosen.date})</i>
+                                  </p>
+                                )}
+                                {conflict.competing.length > 0 && (
+                                  <p className="text-xs text-muted">
+                                    {l("Bersaing/usang", "Competing/outdated")}: {conflict.competing.map((c) => `${c.value} · ${c.source} (${c.date})`).join("; ")}
+                                  </p>
+                                )}
+                                {conflict.unverified.length > 0 && (
+                                  <p className="text-xs text-muted">
+                                    {l("Belum terverifikasi", "Unverified")}: {conflict.unverified.map((c) => `${c.value} · ${c.source}`).join("; ")}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          {f.notes.map((n) => (
+                            <div key={n} className="mt-1 p-2 rounded-erp border border-warn/40 bg-warn/10 text-warn text-xs flex items-center gap-2">
+                              <AlertTriangle size={14} className="shrink-0" />
+                              <span>{n}</span>
+                            </div>
+                          ))}
+
+                          {f.access_offer && (
+                            <button
+                              className="btn btn-primary mt-2 w-fit"
+                              disabled={accessRequestedFor[i]}
+                              onClick={() => handleRequestAccess(i, f, m.question)}
+                            >
+                              <ShieldAlert size={16} />{" "}
+                              {accessRequestedFor[i]
+                                ? l("Permintaan akses dikirim", "Access request sent")
+                                : `${t("requestAccess")}: ${f.access_offer.display_name}`}
+                            </button>
+                          )}
+
+                          {cites.length > 0 && (
+                            <div className="mt-2 pt-2 border-t border-line/60 flex flex-wrap items-center gap-1.5">
+                              <span className="text-xs text-muted mr-1">{t("sources")}:</span>
+                              {cites.map((c, n) => (
+                                <button
+                                  key={c.id}
+                                  type="button"
+                                  onClick={() => openSource(c.id)}
+                                  className={`btn !py-1 !px-2.5 text-xs hover:border-brand inline-flex items-center gap-1.5 ${f.stale_doc_ids.includes(c.id) ? "opacity-60 line-through" : ""}`}
+                                  title={`${c.title} · ${c.container}${c.date ? ` · ${c.date}` : ""}`}
+                                >
+                                  [{n + 1}] {KIND_ICON[kindOf(c.type)]} {c.title || c.id}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </>
+                      )}
+                      {!m.streaming && isBot && <p className="text-xs text-muted mt-1">{t("dataAsOf")} {m.at}</p>}
+                    </div>
+                  </motion.div>
+                );
+              })}
+
+              <div ref={messagesEndRef} />
+            </div>
+          </div>
+
+          {/* Input Bar pinned at the bottom */}
+          <div className="shrink-0 border-t border-line bg-surface/90 backdrop-blur-md px-4 md:px-8 py-3">
+            <div className="max-w-4xl mx-auto relative flex flex-col gap-2">
+              {/* @ Document Autocomplete Popover */}
+              <AnimatePresence>
+                {mentionMatch && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 8 }}
+                    className="absolute bottom-full left-0 right-0 mb-2 card p-2 shadow-xl border-brand/30 max-h-64 overflow-y-auto z-30"
+                  >
+                    <div className="px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider text-muted flex items-center justify-between">
+                      <span>{l("Tandai dokumen (@)", "Tag a document (@)")}</span>
+                      <span className="font-normal normal-case">{l("↑↓ pilih · Enter tandai · Esc tutup", "↑↓ navigate · Enter select · Esc close")}</span>
+                    </div>
+                    {filteredMentionDocs.length === 0 ? (
+                      <p className="text-xs text-muted px-2.5 py-3">
+                        {l("Tidak ada dokumen yang cocok dengan pencarian Anda.", "No readable documents match your search.")}
                       </p>
                     ) : (
-                      m.text && (
-                        <p className="leading-relaxed text-[0.98rem] whitespace-pre-wrap">
-                          {render(m.text)}
-                          {m.streaming && <span className="inline-block w-[2px] h-4 bg-fg align-middle ml-1 animate-pulse" />}
-                        </p>
-                      )
-                    )}
-
-                    {m.error && (
-                      <p role="alert" className="text-sm text-bad flex items-center gap-2">
-                        <AlertTriangle size={14} /> {l("Gagal mendapat jawaban: ", "Could not get an answer: ")}{m.error}
-                      </p>
-                    )}
-
-                    {/* Rich cards: conflicts, notes, access, citations */}
-                    {!m.streaming && f && (
-                      <>
-                        {conflict && (
-                          <div className="mt-2 p-2.5 rounded-erp border border-warn/40 bg-warn/5 flex gap-2 text-warn text-sm">
-                            <Scale size={16} className="shrink-0 mt-0.5" />
-                            <div>
-                              <b>{l("Konflik sumber", "Source conflict")}:</b> {conflict.reason}
-                              {conflict.chosen && (
-                                <p className="text-xs text-muted mt-1">
-                                  {l("Dipakai", "Used")}: <i>{conflict.chosen.value} · {conflict.chosen.source} ({conflict.chosen.date})</i>
-                                </p>
-                              )}
-                              {conflict.competing.length > 0 && (
-                                <p className="text-xs text-muted">
-                                  {l("Bersaing/usang", "Competing/outdated")}: {conflict.competing.map((c) => `${c.value} · ${c.source} (${c.date})`).join("; ")}
-                                </p>
-                              )}
-                              {conflict.unverified.length > 0 && (
-                                <p className="text-xs text-muted">
-                                  {l("Belum terverifikasi", "Unverified")}: {conflict.unverified.map((c) => `${c.value} · ${c.source}`).join("; ")}
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                        )}
-
-                        {f.notes.map((n) => (
-                          <div key={n} className="mt-1 p-2 rounded-erp border border-warn/40 bg-warn/10 text-warn text-xs flex items-center gap-2">
-                            <AlertTriangle size={14} className="shrink-0" />
-                            <span>{n}</span>
-                          </div>
-                        ))}
-
-                        {f.access_offer && (
+                      filteredMentionDocs.map((d, idx) => {
+                        const active = idx === mentionIdx;
+                        return (
                           <button
-                            className="btn btn-primary mt-2 w-fit"
-                            disabled={accessRequestedFor[i]}
-                            onClick={() => handleRequestAccess(i, f, m.question)}
+                            key={d.id}
+                            type="button"
+                            onMouseEnter={() => setMentionIdx(idx)}
+                            onClick={() => selectMentionDoc(d)}
+                            className={`w-full text-left px-2.5 py-2 rounded-erp flex items-center gap-2.5 text-sm transition-colors ${
+                              active ? "bg-tint text-brand font-medium" : "hover:bg-surface2"
+                            }`}
                           >
-                            <ShieldAlert size={16} />{" "}
-                            {accessRequestedFor[i]
-                              ? l("Permintaan akses dikirim", "Access request sent")
-                              : `${t("requestAccess")}: ${f.access_offer.display_name}`}
+                            <FileIcon filename={d.filename} size={16} />
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate leading-tight">{d.title || d.filename}</p>
+                              <p className="text-xs text-muted truncate">
+                                {d.folder_name} · <span className="font-mono">{d.filename}</span>
+                              </p>
+                            </div>
+                            <span className="text-[11px] font-mono text-muted shrink-0">{d.id}</span>
                           </button>
-                        )}
-
-                        {cites.length > 0 && (
-                          <div className="mt-2 pt-2 border-t border-line/60 flex flex-wrap items-center gap-1.5">
-                            <span className="text-xs text-muted mr-1">{t("sources")}:</span>
-                            {cites.map((c, n) => (
-                              <button
-                                key={c.id}
-                                type="button"
-                                onClick={() => openSource(c.id)}
-                                className={`btn !py-1 !px-2.5 text-xs hover:border-brand inline-flex items-center gap-1.5 ${f.stale_doc_ids.includes(c.id) ? "opacity-60 line-through" : ""}`}
-                                title={`${c.title} · ${c.container}${c.date ? ` · ${c.date}` : ""}`}
-                              >
-                                [{n + 1}] {KIND_ICON[kindOf(c.type)]} {c.title || c.id}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </>
+                        );
+                      })
                     )}
-                    {!m.streaming && isBot && <p className="text-xs text-muted mt-1">{t("dataAsOf")} {m.at}</p>}
-                  </div>
-                </motion.div>
-              );
-            })}
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
-            <div ref={messagesEndRef} />
+              {/* Tagged Documents Pills */}
+              {taggedDocs.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5 px-1">
+                  <span className="text-xs text-muted flex items-center gap-1">
+                    <AtSign size={12} className="text-brand" />
+                    {l("Dokumen ditandai:", "Tagged documents:")}
+                  </span>
+                  {taggedDocs.map((doc) => (
+                    <span
+                      key={doc.id}
+                      className="inline-flex items-center gap-1.5 pl-2.5 pr-1.5 py-1 rounded-full text-xs font-medium bg-tint text-brand border border-brand/30"
+                    >
+                      <FileIcon filename={doc.filename} size={13} />
+                      <span className="max-w-[220px] truncate">{doc.title || doc.filename}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeTaggedDoc(doc.id)}
+                        className="w-4 h-4 rounded-full grid place-items-center hover:bg-brand/20"
+                        aria-label={l(`Hapus tag ${doc.title || doc.filename}`, `Remove tag ${doc.title || doc.filename}`)}
+                      >
+                        <X size={11} />
+                      </button>
+                    </span>
+                  ))}
+                  {taggedDocs.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => setTaggedDocs([])}
+                      className="text-xs text-muted hover:text-fg underline ml-1"
+                    >
+                      {l("Hapus semua", "Clear all")}
+                    </button>
+                  )}
+                </div>
+              )}
+
+              <form
+                className="flex gap-2 items-center"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  ask(q);
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={openMentionPicker}
+                  disabled={busy}
+                  className="btn !p-3 rounded-full text-muted hover:text-brand hover:border-brand shrink-0"
+                  title={l("Tandai dokumen (@)", "Tag a document (@)")}
+                  aria-label={l("Tandai dokumen (@)", "Tag a document (@)")}
+                >
+                  <AtSign size={18} />
+                </button>
+                <input
+                  ref={inputRef}
+                  className="input flex-1 py-3 px-4 text-base rounded-full"
+                  value={q}
+                  maxLength={2000}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setQ(val);
+                    detectMention(val, e.target.selectionStart ?? val.length);
+                  }}
+                  onClick={(e) => {
+                    const el = e.currentTarget;
+                    detectMention(el.value, el.selectionStart ?? el.value.length);
+                  }}
+                  onKeyDown={(e) => {
+                    if (mentionMatch && filteredMentionDocs.length > 0) {
+                      if (e.key === "ArrowDown") {
+                        e.preventDefault();
+                        setMentionIdx((i) => (i + 1) % filteredMentionDocs.length);
+                        return;
+                      }
+                      if (e.key === "ArrowUp") {
+                        e.preventDefault();
+                        setMentionIdx((i) => (i - 1 + filteredMentionDocs.length) % filteredMentionDocs.length);
+                        return;
+                      }
+                      if (e.key === "Enter" || e.key === "Tab") {
+                        e.preventDefault();
+                        selectMentionDoc(filteredMentionDocs[mentionIdx]);
+                        return;
+                      }
+                      if (e.key === "Escape") {
+                        e.preventDefault();
+                        setMentionMatch(null);
+                        return;
+                      }
+                    } else if (mentionMatch && e.key === "Escape") {
+                      setMentionMatch(null);
+                    }
+                  }}
+                  placeholder={
+                    taggedDocs.length > 0
+                      ? l(
+                          "Tanyakan apa saja tentang dokumen yang ditandai… (kosongkan untuk meringkas)",
+                          "Ask anything about the tagged document(s)… (leave blank to summarize)",
+                        )
+                      : `${t("placeholder")} · ${l("ketik @ untuk tandai dokumen", "type @ to tag a document")}`
+                  }
+                />
+                <button
+                  className="btn btn-primary btn-lg px-6 rounded-full"
+                  disabled={busy || (!q.trim() && taggedDocs.length === 0)}
+                >
+                  <Send size={18} /> {t("send")}
+                </button>
+              </form>
+            </div>
           </div>
-        </div>
-
-        {/* Input Bar pinned at the bottom */}
-        <div className="shrink-0 border-t border-line bg-surface/90 backdrop-blur-md px-4 md:px-8 py-3.5">
-          <form
-            className="max-w-4xl mx-auto flex gap-2.5"
-            onSubmit={(e) => {
-              e.preventDefault();
-              ask(q);
-            }}
-          >
-            <input
-              className="input flex-1 py-3 px-4 text-base rounded-full"
-              value={q}
-              maxLength={2000}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder={t("placeholder")}
-            />
-            <button className="btn btn-primary btn-lg px-6 rounded-full" disabled={busy || !q.trim()}>
-              <Send size={18} /> {t("send")}
-            </button>
-          </form>
         </div>
       </div>
 
@@ -474,7 +965,7 @@ export default function Chat() {
               {preview.data?.chunks.map((c) => (
                 <div key={c.citation_id} className={`p-3 rounded-erp border whitespace-pre-wrap text-sm leading-relaxed ${c.citation_id === preview.id ? "bg-tint border-brand" : "bg-surface2/60 border-line"}`}>
                   {c.anchor && <p className="eyebrow mb-1">{c.anchor}</p>}
-                  {c.text}
+                  {formatChunkText(c.text)}
                 </div>
               ))}
             </div>

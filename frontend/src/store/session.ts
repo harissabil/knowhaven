@@ -66,6 +66,8 @@ interface State {
   lang: "id" | "en";
   fontScale: number;
   wizards: Record<string, Wizard>;
+  /** Active chat conversation per tenant during this session ("new" = fresh chat, null/undefined = latest). */
+  activeConversations: Record<string, string | null>;
   /** Store a MeOut from any endpoint that returns one (login, register, switch, create company). */
   applyMe: (me: MeOut) => CurrentUser;
   syncMe: () => Promise<CurrentUser | null>;
@@ -74,11 +76,12 @@ interface State {
   logout: () => Promise<void>;
   setTenant: (id: string) => Promise<void>;
   /** POST /api/tenants: the creator becomes Owner + Admin. Returns the company join code. */
-  createCompany: (name: string) => Promise<{ tenantId: string; joinCode: string }>;
+  createCompany: (name: string, industry?: string, industryKey?: string, industryOther?: string) => Promise<{ tenantId: string; joinCode: string }>;
   /** POST /api/tenants/join-code: membership starts pending until an admin approves. */
   joinByCode: (code: string) => Promise<{ tenantId: string; status: string }>;
   set: (p: Partial<Pick<State, "theme" | "lang" | "fontScale">>) => void;
   patchWizard: (tenantId: string, p: Partial<Wizard>) => void;
+  setActiveConversation: (tenantId: string, convId: string | null) => void;
 }
 
 export const useSession = create<State>()(
@@ -90,6 +93,7 @@ export const useSession = create<State>()(
       lang: "id",
       fontScale: 1,
       wizards: {},
+      activeConversations: {},
       applyMe: (me) => {
         const { csrf_token, ...user } = me;
         setCsrfToken(csrf_token);
@@ -105,14 +109,18 @@ export const useSession = create<State>()(
           return null;
         }
       },
-      login: async (email, password) =>
-        get().applyMe(await apiFetch<MeOut>("/api/auth/login", {
+      login: async (email, password) => {
+        set({ activeConversations: {} });
+        return get().applyMe(await apiFetch<MeOut>("/api/auth/login", {
           method: "POST", body: JSON.stringify({ email: email.trim(), password }),
-        })),
-      register: async (name, email, password) =>
-        get().applyMe(await apiFetch<MeOut>("/api/auth/register", {
+        }));
+      },
+      register: async (name, email, password) => {
+        set({ activeConversations: {} });
+        return get().applyMe(await apiFetch<MeOut>("/api/auth/register", {
           method: "POST", body: JSON.stringify({ name: name.trim(), email: email.trim(), password }),
-        })),
+        }));
+      },
       logout: async () => {
         try {
           await apiFetch("/api/auth/logout", { method: "POST" });
@@ -120,7 +128,7 @@ export const useSession = create<State>()(
           // the session may already be gone; clear local state regardless
         } finally {
           setCsrfToken(null);
-          set({ currentUser: null, tenantId: null });
+          set({ currentUser: null, tenantId: null, activeConversations: {} });
         }
       },
       setTenant: async (tenantId) => {
@@ -128,12 +136,18 @@ export const useSession = create<State>()(
           method: "POST", body: JSON.stringify({ tenant_id: tenantId }),
         }));
       },
-      createCompany: async (name) => {
+      createCompany: async (name, industry, industryKey, industryOther) => {
         const res = await apiFetch<{ tenant_id: string; join_code: string; me: MeOut }>("/api/tenants", {
-          method: "POST", body: JSON.stringify({ name: name.trim() }),
+          method: "POST", body: JSON.stringify({ name: name.trim(), industry: industry?.trim() || undefined }),
         });
         get().applyMe(res.me);
-        set((s) => ({ wizards: { ...s.wizards, [res.tenant_id]: newWizard() } }));
+        const w = newWizard();
+        if (industryKey) {
+          w.industry = industryKey;
+          w.industryOther = industryOther ?? "";
+          w.done = [0];
+        }
+        set((s) => ({ wizards: { ...s.wizards, [res.tenant_id]: w } }));
         return { tenantId: res.tenant_id, joinCode: res.join_code };
       },
       joinByCode: async (code) => {
@@ -146,6 +160,8 @@ export const useSession = create<State>()(
       set: (p) => set(p),
       patchWizard: (tenantId, p) =>
         set((s) => ({ wizards: { ...s.wizards, [tenantId]: { ...(s.wizards[tenantId] ?? newWizard()), ...p } } })),
+      setActiveConversation: (tenantId, convId) =>
+        set((s) => ({ activeConversations: { ...s.activeConversations, [tenantId]: convId } })),
     }),
     {
       name: "wb-session",
@@ -153,7 +169,7 @@ export const useSession = create<State>()(
       migrate: () => ({}) as State,
       partialize: (s) => ({
         currentUser: s.currentUser, tenantId: s.tenantId, theme: s.theme, lang: s.lang,
-        fontScale: s.fontScale, wizards: s.wizards,
+        fontScale: s.fontScale, wizards: s.wizards, activeConversations: s.activeConversations,
       }),
     },
   ),

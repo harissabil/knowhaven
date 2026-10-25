@@ -2,7 +2,22 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, ChevronRight, Folder, FolderLock, FolderOpen, Lock, MessageCircle, RefreshCw, Search, ShieldAlert, Upload, X } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
+import {
+  AlertTriangle,
+  ChevronRight,
+  Folder,
+  FolderLock,
+  FolderOpen,
+  Lock,
+  MessageCircle,
+  MessageSquare,
+  RefreshCw,
+  Search,
+  ShieldAlert,
+  Upload,
+  X,
+} from "lucide-react";
 import { FileIcon, Readers, nobodyCanRead, relTime } from "@/components/documents";
 import { Shell } from "@/components/Shell";
 import { useL, useT } from "@/lib/i18n";
@@ -23,6 +38,7 @@ export default function Documents() {
   const [docs, setDocs] = useState<DocumentOut[]>([]);
   const [current, setCurrent] = useState<string | null>(null); // folder id; null = all
   const [q, setQ] = useState("");
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -51,11 +67,35 @@ export default function Documents() {
     return docs.filter((d) => (!current || d.folder_id === current)
       && (!needle || `${d.title ?? ""} ${d.filename} ${d.folder_name}`.toLowerCase().includes(needle)));
   }, [docs, current, q]);
+  const readableShown = useMemo(() => shown.filter((d) => d.can_read), [shown]);
+  const allReadableSelected =
+    readableShown.length > 0 && readableShown.every((d) => selectedIds.includes(d.id));
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  };
+
+  const toggleSelectAllShown = () => {
+    const ids = readableShown.map((d) => d.id);
+    if (allReadableSelected) {
+      setSelectedIds((prev) => prev.filter((id) => !ids.includes(id)));
+    } else {
+      setSelectedIds((prev) => Array.from(new Set([...prev, ...ids])));
+    }
+  };
+
+  const askHaviWithDocs = (ids: string[]) => {
+    if (!ids.length) return;
+    router.push(`/chat?docs=${ids.map(encodeURIComponent).join(",")}`);
+  };
+
   const uploadTargets = folders.filter((f) => f.can_upload && f.source === "upload_folder");
 
   return (
     <Shell title={t("documents")}>
-      <div className="grid md:grid-cols-[240px_1fr] gap-5 items-start">
+      <div className="grid md:grid-cols-[240px_1fr] gap-5 items-start pb-16">
         {/* folder tree */}
         <nav aria-label={l("Folder", "Folders")} className="card p-2 flex flex-col gap-0.5 md:sticky md:top-20">
           <button onClick={() => setCurrent(null)}
@@ -89,6 +129,15 @@ export default function Documents() {
               <input className="input !pl-8 !py-1.5 !w-56" value={q} onChange={(e) => setQ(e.target.value)} placeholder={l("Cari dokumen…", "Search documents…")} />
             </label>
             <button className="btn !py-1.5" onClick={load} disabled={loading} aria-label={l("Segarkan", "Refresh")}><RefreshCw size={14} className={loading ? "animate-spin" : ""} /></button>
+            {selectedIds.length > 0 && (
+              <button
+                type="button"
+                className="btn btn-primary !py-1.5"
+                onClick={() => askHaviWithDocs(selectedIds)}
+              >
+                <MessageSquare size={15} /> {l(`Tanya Havi (${selectedIds.length})`, `Ask Havi (${selectedIds.length})`)}
+              </button>
+            )}
             {uploadTargets.length > 0 && (
               <button className="btn btn-primary !py-1.5" onClick={() => setUploadOpen(true)}><Upload size={15} /> {l("Unggah", "Upload")}</button>
             )}
@@ -109,33 +158,84 @@ export default function Documents() {
 
           {/* file list */}
           <div className="card overflow-hidden">
-            <div className="grid grid-cols-[1fr_auto] md:grid-cols-[1fr_160px_130px_120px] gap-3 px-4 py-2 bg-surface2 text-xs text-muted font-medium">
+            <div className="grid grid-cols-[28px_1fr_auto] md:grid-cols-[28px_1fr_140px_120px_110px_auto] gap-3 px-4 py-2 bg-surface2 text-xs text-muted font-medium items-center">
+              <span className="flex items-center justify-center">
+                <input
+                  type="checkbox"
+                  aria-label={l("Pilih semua dokumen yang dapat dibaca", "Select all readable documents")}
+                  checked={allReadableSelected}
+                  disabled={readableShown.length === 0}
+                  onChange={toggleSelectAllShown}
+                  className="accent-brand w-4 h-4 rounded cursor-pointer disabled:opacity-40"
+                />
+              </span>
               <span>{l("Nama", "Name")}</span>
               <span className="hidden md:block">{l("Folder", "Folder")}</span>
               <span className="hidden md:block">{l("Diunggah oleh", "Uploaded by")}</span>
-              <span className="text-right">{l("Diperbarui", "Updated")}</span>
+              <span className="text-right hidden md:block">{l("Diperbarui", "Updated")}</span>
+              {/* <span className="text-right">{l("Aksi", "Action")}</span> */}
             </div>
-            {shown.map((d) => (
-              <button key={d.id} onClick={() => router.push(`/documents/${encodeURIComponent(d.id)}`)}
-                className="w-full text-left grid grid-cols-[1fr_auto] md:grid-cols-[1fr_160px_130px_120px] gap-3 px-4 py-3 border-t border-line hover:bg-surface2/60 items-center">
-                <span className="flex items-center gap-2.5 min-w-0">
-                  <FileIcon filename={d.filename} />
-                  <span className="min-w-0">
-                    <span className="font-medium truncate block">{d.title || d.filename}</span>
-                    <span className="text-xs text-muted flex items-center gap-1.5 flex-wrap">
-                      <span className="truncate">{d.filename}</span>
-                      {d.revisions > 1 && <span className="px-1.5 rounded border border-line2 font-mono">v{d.revisions}</span>}
-                      {!d.can_read && <span className="inline-flex items-center gap-0.5"><Lock size={11} /> {l("isi terkunci", "content locked")}</span>}
-                      {d.has_pii && <span className="inline-flex items-center gap-0.5 text-warn"><ShieldAlert size={11} /> PII</span>}
-                      {d.injection_flag && <span className="inline-flex items-center gap-0.5 text-warn"><AlertTriangle size={11} /> {l("instruksi tersembunyi", "hidden instructions")}</span>}
+            {shown.map((d) => {
+              const checked = selectedIds.includes(d.id);
+              return (
+                <div
+                  key={d.id}
+                  onClick={() => router.push(`/documents/${encodeURIComponent(d.id)}`)}
+                  className={`w-full text-left grid grid-cols-[28px_1fr_auto] md:grid-cols-[28px_1fr_140px_120px_110px_auto] gap-3 px-4 py-3 border-t border-line hover:bg-surface2/60 items-center cursor-pointer transition-colors ${checked ? "bg-tint/40" : ""
+                    }`}
+                >
+                  <span
+                    className="flex items-center justify-center"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <input
+                      type="checkbox"
+                      aria-label={l(`Pilih ${d.title || d.filename}`, `Select ${d.title || d.filename}`)}
+                      checked={checked}
+                      disabled={!d.can_read}
+                      onChange={() => toggleSelect(d.id)}
+                      title={
+                        d.can_read
+                          ? l("Pilih untuk Tanya Havi", "Select to Ask Havi")
+                          : l("Isi dokumen terkunci untuk peran Anda", "Document content is locked for your roles")
+                      }
+                      className="accent-brand w-4 h-4 rounded cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                    />
+                  </span>
+                  <span className="flex items-center gap-2.5 min-w-0">
+                    <FileIcon filename={d.filename} />
+                    <span className="min-w-0">
+                      <span className="font-medium truncate block">{d.title || d.filename}</span>
+                      <span className="text-xs text-muted flex items-center gap-1.5 flex-wrap">
+                        <span className="truncate">{d.filename}</span>
+                        {d.revisions > 1 && <span className="px-1.5 rounded border border-line2 font-mono">v{d.revisions}</span>}
+                        {!d.can_read && <span className="inline-flex items-center gap-0.5"><Lock size={11} /> {l("isi terkunci", "content locked")}</span>}
+                        {d.has_pii && <span className="inline-flex items-center gap-0.5 text-warn"><ShieldAlert size={11} /> PII</span>}
+                        {d.injection_flag && <span className="inline-flex items-center gap-0.5 text-warn"><AlertTriangle size={11} /> {l("instruksi tersembunyi", "hidden instructions")}</span>}
+                      </span>
                     </span>
                   </span>
-                </span>
-                <span className="hidden md:block text-sm truncate text-muted">{d.folder_name}</span>
-                <span className="hidden md:block text-sm truncate text-muted">{d.uploaded_by ?? "—"}</span>
-                <span className="text-sm text-muted text-right whitespace-nowrap" title={new Date(d.updated_at).toLocaleString()}>{relTime(d.updated_at, lang)}</span>
-              </button>
-            ))}
+                  <span className="hidden md:block text-sm truncate text-muted">{d.folder_name}</span>
+                  <span className="hidden md:block text-sm truncate text-muted">{d.uploaded_by ?? "—"}</span>
+                  <span className="hidden md:block text-sm text-muted text-right whitespace-nowrap" title={new Date(d.updated_at).toLocaleString()}>{relTime(d.updated_at, lang)}</span>
+                  {/* <span className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+                    {d.can_read ? (
+                      <button
+                        type="button"
+                        className="btn !py-1 !px-2.5 text-xs hover:border-brand hover:text-brand inline-flex items-center gap-1"
+                        onClick={() => askHaviWithDocs([d.id])}
+                        title={l("Buka Tanya Havi dengan dokumen ini ditandai", "Open Ask Havi with this document tagged")}
+                      >
+                        <MessageSquare size={13} />
+                        <span>{l("Tanya Havi", "Ask Havi")}</span>
+                      </button>
+                    ) : (
+                      <span className="text-xs text-muted px-2">—</span>
+                    )}
+                  </span> */}
+                </div>
+              );
+            })}
             {!loading && shown.length === 0 && (
               <p className="px-4 py-10 text-center text-sm text-muted border-t border-line">
                 {q ? l("Tidak ada dokumen yang cocok.", "No matching documents.") : l("Belum ada dokumen di sini.", "No documents here yet.")}
@@ -144,6 +244,36 @@ export default function Documents() {
           </div>
         </section>
       </div>
+
+      {/* Floating multi-select Ask Havi action bar */}
+      <AnimatePresence>
+        {selectedIds.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 24 }}
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 card px-4 py-2.5 shadow-xl border-brand/40 bg-surface/95 backdrop-blur-md flex items-center gap-3"
+          >
+            <span className="text-sm font-medium">
+              {l(`${selectedIds.length} dokumen dipilih`, `${selectedIds.length} document(s) selected`)}
+            </span>
+            <button
+              type="button"
+              className="btn btn-primary !py-1.5 text-sm"
+              onClick={() => askHaviWithDocs(selectedIds)}
+            >
+              <MessageSquare size={15} /> {l("Tanya Havi", "Ask Havi")}
+            </button>
+            <button
+              type="button"
+              className="btn !py-1.5 !px-2.5 text-xs text-muted hover:text-fg"
+              onClick={() => setSelectedIds([])}
+            >
+              <X size={14} /> {l("Batal", "Clear")}
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {uploadOpen && (
         <UploadDialog folders={uploadTargets} initial={folder?.can_upload ? folder.id : uploadTargets[0]?.id}
