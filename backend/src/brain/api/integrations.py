@@ -119,6 +119,7 @@ async def refresh_slack(tenant_id: uuid.UUID, token: str) -> dict:
     mapped = await map_slack_members(tenant_id, await slack.users(token))
     member_of = sum(1 for c in chans if c.get("is_member"))
     return {
+        "team_url": await slack.team_url(token),
         "channels": len(chans),
         "bot_in_channels": member_of,
         "joined_now": joined,
@@ -240,11 +241,21 @@ async def process_slack_event(
         change = slack.event_to_change(event, name or ch, names)
         if change is None or change.item is None:
             return
+        # A link back to the message in Slack (connections made before links existed look the
+        # workspace address up once and keep it).
+        base = (row.meta or {}).get("team_url") if row is not None else None
+        if base is None and cfg.get("bot_token"):
+            base = await slack.team_url(cfg["bot_token"])
+        if not change.item.deleted:
+            ts = change.item.external_ref.split(":", 1)[-1]
+            thread = change.item.thread_key.split(":", 1)[-1] if change.item.thread_key else None
+            change.item.url = slack.permalink(base, change.channel_id, ts, thread)
         await ingestor.ingest(tenant_id, [change.item])
         if row is not None:
-            await store.mark(
-                tenant_id, row.id, meta={"last_event_at": datetime.now(UTC).isoformat()}
-            )
+            meta = {"last_event_at": datetime.now(UTC).isoformat()}
+            if base and not (row.meta or {}).get("team_url"):
+                meta["team_url"] = base
+            await store.mark(tenant_id, row.id, meta=meta)
     except Exception:  # noqa: BLE001 - Slack already got its 200; keep the worker alive
         log.exception("slack event failed (tenant %s, team %s)", tenant_id, team_id)
 

@@ -69,6 +69,14 @@ function moodOf(f: FinalEventData): MascotState {
   return "answering";
 }
 
+/** "Confluence" / "Jira" / "Slack" for a source link, from its address. */
+function sourceName(url: string): string {
+  if (url.includes(".slack.com/")) return "Slack";
+  if (url.includes("/browse/")) return "Jira";
+  if (url.includes("/wiki/")) return "Confluence";
+  return "source";
+}
+
 export default function Chat() {
   const t = useT();
   const l = useL();
@@ -151,7 +159,7 @@ export default function Chat() {
                   conversation_id: convId,
                   answer: m.content,
                   decision_path: (m.decision_path ?? "answer") as FinalEventData["decision_path"],
-                  citations: m.sources.map((c) => ({ ...c, url: null })),
+                  citations: m.sources.map((c) => ({ ...c, url: c.url ?? null })),
                   conflicts: [],
                   stale_doc_ids: [],
                   access_offer: null,
@@ -677,15 +685,28 @@ export default function Chat() {
                             <div className="mt-2 pt-2 border-t border-line/60 flex flex-wrap items-center gap-1.5">
                               <span className="text-xs text-muted mr-1">{t("sources")}:</span>
                               {cites.map((c, n) => (
-                                <button
-                                  key={c.id}
-                                  type="button"
-                                  onClick={() => openSource(c.id)}
-                                  className={`btn !py-1 !px-2.5 text-xs hover:border-brand inline-flex items-center gap-1.5 ${f.stale_doc_ids.includes(c.id) ? "opacity-60 line-through" : ""}`}
-                                  title={`${c.title} · ${c.container}${c.date ? ` · ${c.date}` : ""}`}
-                                >
-                                  [{n + 1}] {KIND_ICON[kindOf(c.type)]} {c.title || c.id}
-                                </button>
+                                <span key={c.id} className="inline-flex items-stretch">
+                                  <button
+                                    type="button"
+                                    onClick={() => openSource(c.id)}
+                                    className={`btn !py-1 !px-2.5 text-xs hover:border-brand inline-flex items-center gap-1.5 ${c.url ? "!rounded-r-none" : ""} ${f.stale_doc_ids.includes(c.id) ? "opacity-60 line-through" : ""}`}
+                                    title={`${c.title} · ${c.container}${c.date ? ` · ${c.date}` : ""}`}
+                                  >
+                                    [{n + 1}] {KIND_ICON[kindOf(c.type)]} {c.title || c.id}
+                                  </button>
+                                  {c.url && (
+                                    <a
+                                      href={c.url}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="btn !py-1 !px-2 text-xs !rounded-l-none -ml-px hover:border-brand hover:text-brand inline-flex items-center"
+                                      title={l(`Buka di ${sourceName(c.url)}`, `Open in ${sourceName(c.url)}`)}
+                                      aria-label={l(`Buka ${c.title} di ${sourceName(c.url)}`, `Open ${c.title} in ${sourceName(c.url)}`)}
+                                    >
+                                      <ExternalLink size={12} />
+                                    </a>
+                                  )}
+                                </span>
                               ))}
                             </div>
                           )}
