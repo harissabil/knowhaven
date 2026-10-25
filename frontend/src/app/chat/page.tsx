@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Send,
@@ -26,19 +26,20 @@ import {
 } from "lucide-react";
 import { Shell } from "@/components/Shell";
 import { Mascot, type MascotState } from "@/components/mascot/Mascot";
-import { FileIcon, formatChunkText, relTime } from "@/components/documents";
+import { formatChunkText, relTime } from "@/components/documents";
 import { SUGGESTIONS } from "@/mock/chat";
 import { useL, useT } from "@/lib/i18n";
 import { useSession } from "@/store/session";
 import { apiStream, apiFetch, errorText, type CitationItem, type FinalEventData, type TraceEventData } from "@/lib/api";
 import type { ConversationOut, DocumentOut, MessageOut, SourceOut } from "@/lib/contracts";
 import { toast } from "@/components/ui/Toast";
+import { MentionInput } from "@/components/MentionInput";
+import { plain, present, segments, toMarkup, type Mention } from "@/lib/mentions";
 
 interface Msg {
   role: "user" | "bot";
   text: string;
   question?: string;
-  taggedDocs?: { id: string; title: string }[];
   final?: FinalEventData;
   traces?: TraceEventData[];
   traceLoading?: boolean;
@@ -93,12 +94,11 @@ export default function Chat() {
 
   // Document tagging (@) state
   const [docs, setDocs] = useState<DocumentOut[]>([]);
-  const [taggedDocs, setTaggedDocs] = useState<DocumentOut[]>([]);
-  const [mentionMatch, setMentionMatch] = useState<{ start: number; end: number; query: string } | null>(null);
-  const [mentionIdx, setMentionIdx] = useState(0);
+  const [mentions, setMentions] = useState<Mention[]>([]); // tags present in the message box
+  const [pickerReq, setPickerReq] = useState(0);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [focusReq, setFocusReq] = useState(0);
   const abortRef = useRef<(() => void) | null>(null);
 
   const fmt = useCallback(
@@ -124,11 +124,10 @@ export default function Chat() {
             .filter(Boolean);
           const matched = readable.filter((d) => wantedIds.includes(d.id));
           if (matched.length > 0) {
-            setTaggedDocs((prev) => {
-              const existing = new Set(prev.map((p) => p.id));
-              return [...prev, ...matched.filter((m) => !existing.has(m.id))];
-            });
-            setTimeout(() => inputRef.current?.focus(), 50);
+            const tags = matched.map((d) => ({ id: d.id, title: (d.title || d.filename).replace(/[[\]\n]/g, " ").trim() }));
+            setMentions(tags);
+            setQ(`${lang === "id" ? "Ringkas" : "Summarize"} ${tags.map((t) => `@${t.title}`).join(" ")} `);
+            setFocusReq((n) => n + 1);
           }
         }
       })
@@ -230,7 +229,7 @@ export default function Chat() {
     setOpenTraceIdx(null);
     setState("idle");
     if (tenantId) setActiveConversation(tenantId, "new");
-    inputRef.current?.focus();
+    setFocusReq((n) => n + 1);
   };
 
   useEffect(() => {
@@ -242,67 +241,6 @@ export default function Chat() {
     const pre = new URLSearchParams(window.location.search).get("q");
     if (pre) setQ(pre.slice(0, 2000));
   }, []);
-
-  // @ mention matching
-  const filteredMentionDocs = useMemo(() => {
-    if (!mentionMatch) return [];
-    const needle = mentionMatch.query.toLowerCase();
-    const taggedSet = new Set(taggedDocs.map((d) => d.id));
-    return docs
-      .filter(
-        (d) =>
-          !taggedSet.has(d.id) &&
-          (!needle ||
-            (d.title ?? "").toLowerCase().includes(needle) ||
-            d.filename.toLowerCase().includes(needle) ||
-            d.folder_name.toLowerCase().includes(needle) ||
-            d.id.toLowerCase().includes(needle)),
-      )
-      .slice(0, 8);
-  }, [mentionMatch, docs, taggedDocs]);
-
-  const detectMention = (value: string, cursor: number) => {
-    const before = value.slice(0, cursor);
-    const m = /(?:^|\s)@([^\s@]*)$/.exec(before);
-    if (!m) {
-      setMentionMatch(null);
-      return;
-    }
-    const query = m[1];
-    const start = cursor - query.length - 1;
-    setMentionMatch({ start, end: cursor, query });
-    setMentionIdx(0);
-  };
-
-  const selectMentionDoc = (doc: DocumentOut) => {
-    if (mentionMatch) {
-      const nextQ = (q.slice(0, mentionMatch.start) + q.slice(mentionMatch.end)).replace(/\s{2,}/g, " ");
-      setQ(nextQ);
-    }
-    setTaggedDocs((prev) => (prev.some((d) => d.id === doc.id) ? prev : [...prev, doc]));
-    setMentionMatch(null);
-    setTimeout(() => inputRef.current?.focus(), 10);
-  };
-
-  const removeTaggedDoc = (docId: string) => {
-    setTaggedDocs((prev) => prev.filter((d) => d.id !== docId));
-  };
-
-  const openMentionPicker = () => {
-    const el = inputRef.current;
-    if (!el) return;
-    if (mentionMatch) {
-      setMentionMatch(null);
-      return;
-    }
-    const next = q.endsWith(" ") || !q ? `${q}@` : `${q} @`;
-    setQ(next);
-    detectMention(next, next.length);
-    setTimeout(() => {
-      el.focus();
-      el.setSelectionRange(next.length, next.length);
-    }, 10);
-  };
 
   const [preview, setPreview] = useState<{ id: string; data?: SourceOut; missing?: boolean } | null>(null);
   async function openSource(id: string) {
@@ -363,20 +301,18 @@ export default function Chat() {
   }
 
   function ask(text: string) {
-    const cleanText = text.trim();
-    if ((!cleanText && taggedDocs.length === 0) || busy) return;
-    const effectiveQuestion =
-      cleanText ||
-      (lang === "id"
-        ? `Ringkas dokumen ${taggedDocs.map((d) => `"${d.title || d.filename}"`).join(", ")}`
-        : `Summarize the document(s) ${taggedDocs.map((d) => `"${d.title || d.filename}"`).join(", ")}`);
-    const currentTagged = [...taggedDocs];
-    const docIds = currentTagged.map((d) => d.id);
+    const visible = text.trim();
+    if (!visible || busy) return;
+    const tags = present(visible, mentions);
+    // Only tags typed ("@SOP Cuti")? Treat it as "summarize these".
+    const rest = tags.reduce((acc, t) => acc.split(`@${t.title}`).join(""), visible).trim();
+    const effective = rest ? visible : `${lang === "id" ? "Ringkas" : "Summarize"} ${visible}`;
+    const question = toMarkup(effective, tags); // "@[Title](DOC-id)": kept in history, resolved by the API
+    const effectiveQuestion = plain(question);
 
     setBusy(true);
     setQ("");
-    setMentionMatch(null);
-    setTaggedDocs([]);
+    setMentions([]);
     setState("thinking");
 
     const now = fmt(new Date());
@@ -385,12 +321,7 @@ export default function Chat() {
       botIdx = m.length + 1;
       return [
         ...m,
-        {
-          role: "user",
-          text: effectiveQuestion,
-          taggedDocs: currentTagged.map((d) => ({ id: d.id, title: d.title || d.filename })),
-          at: now,
-        },
+        { role: "user", text: question, at: now },
         { role: "bot", text: "", question: effectiveQuestion, at: now, streaming: true, traces: [] },
       ];
     });
@@ -400,9 +331,8 @@ export default function Chat() {
     const { abort } = apiStream(
       "/api/chat",
       {
-        question: effectiveQuestion,
+        question,
         conversation_id: conversationId ?? undefined,
-        document_ids: docIds.length > 0 ? docIds : undefined,
       },
       {
         onTrace: (trace) => {
@@ -610,22 +540,6 @@ export default function Chat() {
                         m.role === "user" ? "bg-surface2 border border-line2" : "border border-line bg-surface"
                       }`}
                     >
-                      {/* Tagged document pills on user messages */}
-                      {!isBot && m.taggedDocs && m.taggedDocs.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 mb-0.5">
-                          {m.taggedDocs.map((doc) => (
-                            <button
-                              key={doc.id}
-                              type="button"
-                              onClick={() => openSource(doc.id)}
-                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-tint text-brand border border-brand/30 hover:border-brand"
-                            >
-                              <FileText size={11} /> @{doc.title}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-
                       {/* Pipeline trace badge header */}
                       {isBot && hasTrace && (
                         <div className="border-b border-line/60 pb-2 mb-1">
@@ -694,7 +608,12 @@ export default function Chat() {
                       ) : (
                         m.text && (
                           <p className="leading-relaxed text-[0.98rem] whitespace-pre-wrap">
-                            {render(m.text)}
+                            {isBot ? render(m.text) : segments(m.text).map((seg, k) => seg.kind === "text" ? <span key={k}>{seg.text}</span> : (
+                              <button key={k} type="button" onClick={() => openSource(seg.id)} title={seg.id}
+                                className="inline-flex items-center gap-1 px-1.5 rounded-md bg-tint text-brand font-medium hover:underline align-baseline">
+                                <FileText size={13} className="shrink-0" />{seg.title}
+                              </button>
+                            ))}
                             {m.streaming && <span className="inline-block w-[2px] h-4 bg-fg align-middle ml-1 animate-pulse" />}
                           </p>
                         )
@@ -784,90 +703,8 @@ export default function Chat() {
           {/* Input Bar pinned at the bottom */}
           <div className="shrink-0 border-t border-line bg-surface/90 backdrop-blur-md px-4 md:px-8 py-3">
             <div className="max-w-4xl mx-auto relative flex flex-col gap-2">
-              {/* @ Document Autocomplete Popover */}
-              <AnimatePresence>
-                {mentionMatch && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 8 }}
-                    className="absolute bottom-full left-0 right-0 mb-2 card p-2 shadow-xl border-brand/30 max-h-64 overflow-y-auto z-30"
-                  >
-                    <div className="px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider text-muted flex items-center justify-between">
-                      <span>{l("Tandai dokumen (@)", "Tag a document (@)")}</span>
-                      <span className="font-normal normal-case">{l("↑↓ pilih · Enter tandai · Esc tutup", "↑↓ navigate · Enter select · Esc close")}</span>
-                    </div>
-                    {filteredMentionDocs.length === 0 ? (
-                      <p className="text-xs text-muted px-2.5 py-3">
-                        {l("Tidak ada dokumen yang cocok dengan pencarian Anda.", "No readable documents match your search.")}
-                      </p>
-                    ) : (
-                      filteredMentionDocs.map((d, idx) => {
-                        const active = idx === mentionIdx;
-                        return (
-                          <button
-                            key={d.id}
-                            type="button"
-                            onMouseEnter={() => setMentionIdx(idx)}
-                            onClick={() => selectMentionDoc(d)}
-                            className={`w-full text-left px-2.5 py-2 rounded-erp flex items-center gap-2.5 text-sm transition-colors ${
-                              active ? "bg-tint text-brand font-medium" : "hover:bg-surface2"
-                            }`}
-                          >
-                            <FileIcon filename={d.filename} size={16} />
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate leading-tight">{d.title || d.filename}</p>
-                              <p className="text-xs text-muted truncate">
-                                {d.folder_name} · <span className="font-mono">{d.filename}</span>
-                              </p>
-                            </div>
-                            <span className="text-[11px] font-mono text-muted shrink-0">{d.id}</span>
-                          </button>
-                        );
-                      })
-                    )}
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              {/* Tagged Documents Pills */}
-              {taggedDocs.length > 0 && (
-                <div className="flex flex-wrap items-center gap-1.5 px-1">
-                  <span className="text-xs text-muted flex items-center gap-1">
-                    <AtSign size={12} className="text-brand" />
-                    {l("Dokumen ditandai:", "Tagged documents:")}
-                  </span>
-                  {taggedDocs.map((doc) => (
-                    <span
-                      key={doc.id}
-                      className="inline-flex items-center gap-1.5 pl-2.5 pr-1.5 py-1 rounded-full text-xs font-medium bg-tint text-brand border border-brand/30"
-                    >
-                      <FileIcon filename={doc.filename} size={13} />
-                      <span className="max-w-[220px] truncate">{doc.title || doc.filename}</span>
-                      <button
-                        type="button"
-                        onClick={() => removeTaggedDoc(doc.id)}
-                        className="w-4 h-4 rounded-full grid place-items-center hover:bg-brand/20"
-                        aria-label={l(`Hapus tag ${doc.title || doc.filename}`, `Remove tag ${doc.title || doc.filename}`)}
-                      >
-                        <X size={11} />
-                      </button>
-                    </span>
-                  ))}
-                  {taggedDocs.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => setTaggedDocs([])}
-                      className="text-xs text-muted hover:text-fg underline ml-1"
-                    >
-                      {l("Hapus semua", "Clear all")}
-                    </button>
-                  )}
-                </div>
-              )}
-
               <form
-                className="flex gap-2 items-center"
+                className="flex gap-2 items-end"
                 onSubmit={(e) => {
                   e.preventDefault();
                   ask(q);
@@ -875,7 +712,7 @@ export default function Chat() {
               >
                 <button
                   type="button"
-                  onClick={openMentionPicker}
+                  onClick={() => setPickerReq((n) => n + 1)}
                   disabled={busy}
                   className="btn !p-3 rounded-full text-muted hover:text-brand hover:border-brand shrink-0"
                   title={l("Tandai dokumen (@)", "Tag a document (@)")}
@@ -883,59 +720,19 @@ export default function Chat() {
                 >
                   <AtSign size={18} />
                 </button>
-                <input
-                  ref={inputRef}
-                  className="input flex-1 py-3 px-4 text-base rounded-full"
+                <MentionInput
                   value={q}
-                  maxLength={2000}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setQ(val);
-                    detectMention(val, e.target.selectionStart ?? val.length);
-                  }}
-                  onClick={(e) => {
-                    const el = e.currentTarget;
-                    detectMention(el.value, el.selectionStart ?? el.value.length);
-                  }}
-                  onKeyDown={(e) => {
-                    if (mentionMatch && filteredMentionDocs.length > 0) {
-                      if (e.key === "ArrowDown") {
-                        e.preventDefault();
-                        setMentionIdx((i) => (i + 1) % filteredMentionDocs.length);
-                        return;
-                      }
-                      if (e.key === "ArrowUp") {
-                        e.preventDefault();
-                        setMentionIdx((i) => (i - 1 + filteredMentionDocs.length) % filteredMentionDocs.length);
-                        return;
-                      }
-                      if (e.key === "Enter" || e.key === "Tab") {
-                        e.preventDefault();
-                        selectMentionDoc(filteredMentionDocs[mentionIdx]);
-                        return;
-                      }
-                      if (e.key === "Escape") {
-                        e.preventDefault();
-                        setMentionMatch(null);
-                        return;
-                      }
-                    } else if (mentionMatch && e.key === "Escape") {
-                      setMentionMatch(null);
-                    }
-                  }}
-                  placeholder={
-                    taggedDocs.length > 0
-                      ? l(
-                          "Tanyakan apa saja tentang dokumen yang ditandai… (kosongkan untuk meringkas)",
-                          "Ask anything about the tagged document(s)… (leave blank to summarize)",
-                        )
-                      : `${t("placeholder")} · ${l("ketik @ untuk tandai dokumen", "type @ to tag a document")}`
-                  }
+                  onChange={setQ}
+                  mentions={mentions}
+                  onMentionsChange={setMentions}
+                  docs={docs}
+                  onSubmit={() => ask(q)}
+                  disabled={busy}
+                  focusRequest={focusReq}
+                  pickerRequest={pickerReq}
+                  placeholder={`${t("placeholder")} · ${l("ketik @ untuk tandai dokumen", "type @ to tag a document")}`}
                 />
-                <button
-                  className="btn btn-primary btn-lg px-6 rounded-full"
-                  disabled={busy || (!q.trim() && taggedDocs.length === 0)}
-                >
+                <button className="btn btn-primary btn-lg px-6 rounded-full shrink-0" disabled={busy || !q.trim()}>
                   <Send size={18} /> {t("send")}
                 </button>
               </form>

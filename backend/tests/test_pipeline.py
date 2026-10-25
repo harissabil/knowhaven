@@ -352,3 +352,26 @@ async def test_sse_endpoint_history_and_source_viewer(org):
     hidden = await dimas.get("/api/sources/CHAT-proyek-kenari-0001")
     missing = await dimas.get("/api/sources/CHAT-tidak-ada-0001")
     assert hidden.status_code == missing.status_code == 404 and hidden.json() == missing.json()
+
+
+async def test_inline_document_tag_is_kept_in_history_and_hidden_from_the_model(org):
+    _, _, people = org
+    dimas = people["Dimas"]
+    app.dependency_overrides[get_pipeline] = pipeline
+    try:
+        r = await dimas.post(
+            "/api/chat", json={"question": "Ringkas @[SOP Reimbursement](DOC-sop-reimbursement)"}
+        )
+        f = next(
+            json.loads(m.group(2))
+            for m in re.finditer(r"event: (\w+)\ndata: (.*)\n\n", r.text)
+            if m.group(1) == "final"
+        )
+    finally:
+        app.dependency_overrides.pop(get_pipeline, None)
+    msgs = (await dimas.get(f"/api/conversations/{f['conversation_id']}")).json()
+    assert (
+        msgs[0]["content"] == "Ringkas @[SOP Reimbursement](DOC-sop-reimbursement)"
+    )  # chip survives in history
+    trace = (await dimas.get(f"/api/queries/{f['query_id']}/trace")).json()
+    assert any("sumber" in (t["summary"] or "").lower() for t in trace if t["name"] == "retrieve")
