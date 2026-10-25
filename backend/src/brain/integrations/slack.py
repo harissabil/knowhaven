@@ -199,6 +199,27 @@ class Change:
     channel_id: str
 
 
+def permalink(
+    team_url: str | None, channel_id: str, ts: str, thread_ts: str | None = None
+) -> str | None:
+    """Web link to one message, e.g. https://acme.slack.com/archives/C123/p1729000000123456.
+    Only for real Slack timestamps (live events): imported history has no such message."""
+    if not team_url or not channel_id or not ts:
+        return None
+    url = f"{team_url.rstrip('/')}/archives/{channel_id}/p{ts.replace('.', '')}"
+    if thread_ts and thread_ts != ts:
+        url += f"?thread_ts={thread_ts}&cid={channel_id}"
+    return url
+
+
+async def team_url(token: str, transport=None) -> str | None:
+    """The workspace's web address (auth.test), used to build message links."""
+    try:
+        return (await _call("auth.test", token, transport)).get("url")
+    except (SlackError, httpx.HTTPError, ValueError):  # a missing link must never drop the event
+        return None
+
+
 def event_to_change(event: dict, channel_name: str, user_names: dict[str, str]) -> Change | None:
     """message → new item · message_changed → new version · message_deleted → soft delete."""
     if event.get("type") != "message":

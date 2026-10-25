@@ -96,6 +96,7 @@ class CitationOut(BaseModel):
     title: str
     container: str
     date: str | None
+    url: str | None = None  # the page / issue / message at its source, when there is one
 
 
 class MessageOut(BaseModel):
@@ -147,7 +148,8 @@ async def conversation(conversation_id: uuid.UUID, ctx: Member) -> list[MessageO
         meta = {
             it.id: it
             for it in (await s.execute(
-                select(SourceItem.id, SourceItem.type, SourceItem.title, SourceItem.updated_at, Container.name.label("container"))
+                select(SourceItem.id, SourceItem.type, SourceItem.title, SourceItem.updated_at, SourceItem.url,
+                       Container.name.label("container"))
                 .join(Container, (Container.id == SourceItem.container_id) & (Container.tenant_id == SourceItem.tenant_id))
                 .where(SourceItem.id.in_(sorted(visible)))
             )).all()
@@ -184,7 +186,7 @@ async def conversation(conversation_id: uuid.UUID, ctx: Member) -> list[MessageO
                 elif base in meta:
                     it = meta[base]
                     out.append(CitationOut(id=c, type=it.type, title=it.title or it.container, container=it.container,
-                                           date=it.updated_at.date().isoformat()))  # fmt: skip
+                                           date=it.updated_at.date().isoformat(), url=it.url))  # fmt: skip
             return out
 
         return [

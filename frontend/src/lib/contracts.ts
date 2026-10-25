@@ -83,7 +83,7 @@ export interface SourceOut {
 }
 
 export interface ConversationOut { id: string; title: string | null; channel: string; created_at: string }
-export interface HistoryCitation { id: string; type: string; title: string; container: string; date: string | null }
+export interface HistoryCitation { id: string; type: string; title: string; container: string; date: string | null; url?: string | null }
 export interface MessageOut {
   role: "user" | "assistant" | string;
   content: string;
