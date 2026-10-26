@@ -6,6 +6,7 @@ import { ArrowRight, Moon, Sun } from "lucide-react";
 import { Mascot, type MascotState } from "@/components/mascot/Mascot";
 import { KnowhavenLogo, LOGOS } from "@/components/BrandLogos";
 import { FlowScene } from "@/components/landing/FlowScene";
+import { IntroducingHavi } from "@/components/landing/IntroducingHavi";
 import { RoleDemo } from "@/components/landing/RoleDemo";
 import { ProductTabs } from "@/components/landing/ProductTabs";
 import { Reveal } from "@/components/ui/Reveal";
@@ -16,7 +17,7 @@ import { useSession } from "@/store/session";
 
 const C = {
   id: {
-    nav: ["Fitur", "Coba sendiri", "Cara kerja", "Keamanan"],
+    nav: ["Kenalkan Havi", "Fitur", "Coba sendiri", "Cara kerja", "Keamanan"],
     login: "Masuk", start: "Mulai Sekarang", demo: "Lihat demo",
     pill: "Tencent Cloud Hackathon Indonesia 2026",
     h1a: "Semua pengetahuan kantor.",
@@ -52,7 +53,7 @@ const C = {
     foot: "Knowhaven. Dibuat oleh Hokulele Software.",
   },
   en: {
-    nav: ["Features", "Try it", "How it works", "Security"],
+    nav: ["Meet Havi", "Features", "Try it", "How it works", "Security"],
     login: "Sign in", start: "Start Now", demo: "See demo",
     pill: "Tencent Cloud Hackathon Indonesia 2026",
     h1a: "Your company's knowledge.",
@@ -98,7 +99,7 @@ const MARQUEE = [
 export default function Landing() {
   const { lang, theme, set, currentUser } = useSession();
   const c = C[lang];
-  const href = ["#features", "#try", "#how", "#trust"];
+  const href = ["#havi", "#features", "#try", "#how", "#trust"];
   const [ctaHover, setCtaHover] = useState(false);
   const howRef = useRef<HTMLDivElement>(null);
   const { scrollYProgress } = useScroll({ target: howRef, offset: ["start 80%", "end 60%"] });
@@ -151,6 +152,9 @@ export default function Landing() {
         <div className="hidden sm:block"><FlowScene lang={lang} /></div>
         <div className="sm:hidden flex justify-center"><Mascot size={160} state={heroMood} /></div>
       </section>
+
+      {/* INTRODUCING HAVI */}
+      <IntroducingHavi lang={lang} />
 
       {/* STATS (dark) */}
       <section data-theme="dark" className="bg-bg text-fg">
