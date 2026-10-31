@@ -6,7 +6,7 @@
 
 Company knowledge answers that respect every access boundary.
 
-[Accountability sheet](./ACCOUNTABILITY_SHEET.md) · [Test results](./TEST_RESULTS.md) · [Evaluation](./backend/eval/README.md) · [Screenshots](./screenshots/)
+[Screenshots](./screenshots/) · [Demo Video](https://youtu.be/wSy9_BkeDeM) · [Accountability sheet](./ACCOUNTABILITY_SHEET.md) · [Test results](./TEST_RESULTS.md) · [Evaluation](./backend/eval/README.md)  
 
 <sub>Challenge A, The Workplace Brain · AI CAN DO IT, Tencent Cloud Hackathon Indonesia 2026</sub>
 
