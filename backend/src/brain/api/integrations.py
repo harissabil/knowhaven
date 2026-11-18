@@ -17,10 +17,11 @@ import json
 import logging
 import uuid
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, select, update
 
@@ -30,11 +31,14 @@ from brain.audit import log as audit
 from brain.db.models import Container, Integration, MemberProfile, Membership, User
 from brain.db.session import tenant_session
 from brain.ingestion.pipeline import Ingestor
-from brain.integrations import atlassian, slack, store, sync
+from brain.integrations import atlassian, slack, store, sync, webhooks
 from brain.rbac.context import load_context
 
 router = APIRouter(tags=["integrations"])
 log = logging.getLogger(__name__)
+AUTOMATION_TEMPLATE = (
+    Path(__file__).parents[1] / "integrations/templates/confluence_automation.json"
+)
 
 
 class IntegrationOut(BaseModel):
@@ -353,7 +357,7 @@ async def connect_atlassian(body: AtlassianIn, ctx: Admin, background: Backgroun
 async def sync_atlassian_now(
     ctx: Admin, ingestor: Annotated[Ingestor, Depends(get_ingestor)]
 ) -> dict:
-    report = await sync.sync_atlassian(ctx.tenant_id, ingestor)
+    report = await sync.sync_atlassian(ctx.tenant_id, ingestor, full=True)
     if report.get("skipped"):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "atlassian_not_connected")
     return report
@@ -448,3 +452,150 @@ async def map_slack_user(slack_user_id: str, body: SlackMapIn, ctx: Admin) -> di
         "slack_user_id": slack_user_id,
         "member_user_id": str(body.member_user_id) if body.member_user_id else None,
     }
+
+
+# --- Atlassian webhooks (optional; the 2-minute poll catches everything without them) ------------
+
+
+class JiraSecretIn(BaseModel):
+    secret: str = Field(default="", max_length=200)  # empty = remove
+
+
+async def _confluence_nonce(tenant_id: uuid.UUID, rotate: bool = False) -> str | None:
+    async with tenant_session(tenant_id) as s:
+        row = await store.get(s, "confluence")
+        nonce = store.config(row).get("webhook_nonce") if row is not None else None
+    if row is None:
+        return None
+    if rotate or not nonce:
+        nonce = webhooks.new_nonce()
+        await store.patch(tenant_id, "confluence", cfg={"webhook_nonce": nonce})
+    return nonce
+
+
+@router.get("/admin/integrations/atlassian/webhooks")
+async def atlassian_webhooks(ctx: Admin) -> dict:
+    """What the admin pastes into Jira (URL + their secret) and a Confluence Automation flow
+    (URL + token). The Jira secret itself is never returned."""
+    nonce = await _confluence_nonce(ctx.tenant_id)
+    if nonce is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "atlassian_not_connected")
+    async with tenant_session(ctx.tenant_id) as s:
+        jira = await store.get(s, "jira")
+    urls = webhooks.urls()
+    return {
+        "jira": {"url": urls["jira"], "secret_hint": ((jira.meta or {}).get("webhook_secret_hint") if jira else None)},
+        "confluence": {"url": urls["confluence"], "token": webhooks.confluence_token(ctx.tenant_id, nonce)},
+    }  # fmt: skip
+
+
+@router.get("/admin/integrations/confluence/automation-template")
+async def confluence_automation_template(ctx: Admin) -> Response:
+    """Two Automation flows (page published / page updated) ready to import, filled in with this
+    company's site, webhook URL and token. They arrive disabled: the admin turns them on."""
+    nonce = await _confluence_nonce(ctx.tenant_id)
+    async with tenant_session(ctx.tenant_id) as s:
+        row = await store.get(s, "confluence")
+        cfg = store.config(row) if row is not None else None
+    if nonce is None or cfg is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "atlassian_not_connected")
+    try:
+        async with atlassian.AtlassianClient(cfg["site"], cfg["email"], cfg["token"]) as c:
+            cloud_id = await c.cloud_id()
+    except atlassian.AtlassianError as e:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, {"reason": e.reason}) from None
+    if not cloud_id:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, {"reason": "no_cloud_id"})
+    values = {"SITE_ARI": f"ari:cloud:confluence::site/{cloud_id}", "URL": webhooks.urls()["confluence"],
+              "TOKEN": webhooks.confluence_token(ctx.tenant_id, nonce)}  # fmt: skip
+    body = AUTOMATION_TEMPLATE.read_text(encoding="utf-8")
+    for k, v in values.items():
+        body = body.replace("{{" + k + "}}", json.dumps(v)[1:-1])  # JSON-escaped, inside quotes
+    return Response(body, media_type="application/json", headers={
+        "Content-Disposition": 'attachment; filename="knowhaven-confluence-automation.json"'})  # fmt: skip
+
+
+@router.post("/admin/integrations/confluence/webhook-token")
+async def rotate_confluence_token(ctx: Admin) -> dict:
+    """New token; the old one stops working at once (update the Automation flows)."""
+    nonce = await _confluence_nonce(ctx.tenant_id, rotate=True)
+    if nonce is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "atlassian_not_connected")
+    async with tenant_session(ctx.tenant_id) as s:
+        await audit.admin_event(s, ctx, "integration.confluence.webhook_token_rotated")
+    return {"token": webhooks.confluence_token(ctx.tenant_id, nonce)}
+
+
+@router.put("/admin/integrations/jira/webhook-secret")
+async def set_jira_secret(body: JiraSecretIn, ctx: Admin) -> dict:
+    secret = body.secret.strip() or None
+    row = await store.patch(
+        ctx.tenant_id, "jira", cfg={"webhook_secret": secret},
+        meta={"webhook_secret_hint": store.token_hint(secret) if secret else None},
+    )  # fmt: skip
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "atlassian_not_connected")
+    async with tenant_session(ctx.tenant_id) as s:
+        await audit.admin_event(s, ctx, "integration.jira.webhook_secret", set=bool(secret))
+    return {"secret_hint": store.token_hint(secret) if secret else None}
+
+
+async def _run(job, *args, **kw) -> None:
+    try:
+        await job(*args, **kw)
+    except Exception:  # noqa: BLE001 - the next poll picks the item up anyway
+        log.exception("webhook sync failed: %s %s", job.__name__, args[1:])
+
+
+@router.post("/integrations/jira/webhook")
+async def jira_webhook(request: Request, background: BackgroundTasks,
+                       ingestor: Annotated[Ingestor, Depends(get_ingestor)]) -> JSONResponse:  # fmt: skip
+    body = await request.body()
+    try:
+        payload = json.loads(body or b"{}")
+    except ValueError:
+        return JSONResponse({"error": "bad_json"}, status.HTTP_400_BAD_REQUEST)
+    site = webhooks.issue_site(payload)
+    tenant_id = await store.resolve_tenant("jira", site) if site else None
+    if tenant_id is None:
+        return JSONResponse({"error": "unknown_site"}, status.HTTP_401_UNAUTHORIZED)
+    async with tenant_session(tenant_id) as s:
+        row = await store.get(s, "jira")
+        secret = store.config(row).get("webhook_secret") if row is not None else None
+    if not webhooks.jira_signature_ok(body, request.headers.get("X-Hub-Signature"), secret):
+        return JSONResponse({"error": "invalid_signature"}, status.HTTP_401_UNAUTHORIZED)
+    event = payload.get("webhookEvent") or ""
+    issue = payload.get("issue") or {}
+    project = (issue.get("fields") or {}).get("project") or {}
+    if event not in (
+        "jira:issue_created",
+        "jira:issue_updated",
+        "jira:issue_deleted",
+    ) or not issue.get("key"):
+        return JSONResponse({"ok": True, "ignored": event})  # fmt: skip
+    background.add_task(_run, sync.sync_issue, tenant_id, issue["key"], deleted=event == "jira:issue_deleted",
+                        project=(project.get("key") or "", project.get("name") or project.get("key") or ""),
+                        ingestor=ingestor)  # fmt: skip
+    return JSONResponse({"ok": True})
+
+
+@router.post("/integrations/confluence/webhook")
+async def confluence_webhook(request: Request, background: BackgroundTasks,
+                             ingestor: Annotated[Ingestor, Depends(get_ingestor)]) -> JSONResponse:  # fmt: skip
+    token = request.headers.get("X-Knowhaven-Token") or ""
+    tenant_id = webhooks.token_tenant(token)
+    nonce = None
+    if tenant_id is not None:
+        async with tenant_session(tenant_id) as s:
+            row = await store.get(s, "confluence")
+            nonce = store.config(row).get("webhook_nonce") if row is not None else None
+    if tenant_id is None or not webhooks.confluence_token_ok(token, tenant_id, nonce):
+        return JSONResponse({"error": "invalid_token"}, status.HTTP_401_UNAUTHORIZED)
+    try:
+        page_id = str((json.loads(await request.body() or b"{}")).get("pageId") or "").strip()
+    except ValueError:
+        page_id = ""
+    if not page_id.isdigit():
+        return JSONResponse({"error": "page_id_required"}, status.HTTP_400_BAD_REQUEST)
+    background.add_task(_run, sync.sync_page, tenant_id, page_id, ingestor=ingestor)
+    return JSONResponse({"ok": True})

@@ -1,4 +1,4 @@
-"""Neon Object Storage (S3-compatible). Objects are always keyed under tenants/<tenant_id>/."""
+"""S3-compatible object storage (Tencent COS). Objects are keyed under tenants/<tenant_id>/."""
 
 import asyncio
 from functools import lru_cache
@@ -19,8 +19,7 @@ def _client():
         region_name=s.aws_region,
         aws_access_key_id=s.aws_access_key_id,
         aws_secret_access_key=s.aws_secret_access_key,
-        # Neon requires path-style addressing and SigV4.
-        config=Config(signature_version="s3v4", s3={"addressing_style": "path"}),
+        config=Config(signature_version="s3v4", s3={"addressing_style": s.s3_addressing_style}),
     )
 
 
@@ -58,7 +57,10 @@ def presigned_get_url(key: str, expires_in: int = 300) -> str:
 
 
 async def check() -> None:
-    await asyncio.to_thread(_client().head_bucket, Bucket=get_settings().storage_bucket)
+    # A one-key listing, not HeadBucket: a COS data-only key may not read bucket metadata.
+    await asyncio.to_thread(
+        _client().list_objects_v2, Bucket=get_settings().storage_bucket, MaxKeys=1
+    )
 
 
 def _delete_prefix_sync(prefix: str) -> int:

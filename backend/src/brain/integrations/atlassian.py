@@ -110,6 +110,10 @@ class AtlassianClient:
             "account_id": me.get("accountId"),
         }
 
+    async def cloud_id(self) -> str:
+        """The site's cloud ID (public, no auth needed); Automation rules are scoped by it."""
+        return (await self._req("GET", "/_edge/tenant_info")).get("cloudId") or ""
+
     # --- Confluence -----------------------------------------------------------------------
 
     async def spaces(self) -> list[Space]:
@@ -123,6 +127,23 @@ class AtlassianClient:
         rows = await self._paged_v2(f"/wiki/api/v2/spaces/{space.id}/pages",
                                     {"limit": 100, "body-format": "storage", "status": "current"})  # fmt: skip
         return [p for p in rows if str(p.get("id")) != space.homepage_id]
+
+    async def pages_changed(self, space: Space, since: datetime) -> list[dict]:
+        """Pages saved at or after `since`, newest first; stops paging at the first older one."""
+        out, url = [], f"/wiki/api/v2/spaces/{space.id}/pages"
+        p: dict | None = {"limit": 25, "body-format": "storage", "status": "current",
+                          "sort": "-modified-date"}  # fmt: skip
+        for _ in range(200):  # safety stop
+            data = await self._req("GET", url, params=p)
+            for row in data.get("results", []):
+                if _dt((row.get("version") or {}).get("createdAt")) < since:
+                    return [r for r in out if str(r.get("id")) != space.homepage_id]
+                out.append(row)
+            nxt = (data.get("_links") or {}).get("next")
+            if not nxt:
+                break
+            url, p = nxt, None
+        return [r for r in out if str(r.get("id")) != space.homepage_id]
 
     async def page(self, page_id: str) -> dict:
         return await self._req(

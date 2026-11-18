@@ -21,12 +21,33 @@ services:
       web:
         condition: service_started
 
+  # Postgres with pgvector on this server. Not published to the host: only the other services
+  # reach it, as db:5432. DB_OWNER_PASSWORD lives in the root .env, not the repo.
+  db:
+    image: pgvector/pgvector:pg18
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=brain_owner
+      - POSTGRES_DB=brain
+      - POSTGRES_PASSWORD=${DB_OWNER_PASSWORD:?set DB_OWNER_PASSWORD in the root .env}
+    volumes:
+      - pgdata:/var/lib/postgresql
+    mem_limit: 768m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U brain_owner -d brain"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   api:
     build:
       context: ./backend
       dockerfile: Dockerfile
     restart: unless-stopped
     command: ["uvicorn", "brain.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    depends_on:
+      db:
+        condition: service_healthy
     env_file:
       - ./backend/.env
     volumes:
@@ -46,6 +67,9 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     command: ["brain-mcp", "--host", "0.0.0.0", "--port", "8001"]
+    depends_on:
+      db:
+        condition: service_healthy
     env_file:
       - ./backend/.env
     volumes:
@@ -60,6 +84,9 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     command: ["brain-worker"]
+    depends_on:
+      db:
+        condition: service_healthy
     env_file:
       - ./backend/.env
     volumes:
@@ -80,3 +107,4 @@ services:
 volumes:
   caddy_data:
   caddy_config:
+  pgdata:

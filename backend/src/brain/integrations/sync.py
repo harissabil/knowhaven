@@ -1,5 +1,11 @@
 """Pull Confluence + Jira into the knowledge base (the worker calls this every ~2 minutes).
 
+Passes
+- Incremental (most passes): only pages/issues saved since the previous pass, with a small
+  overlap. Nothing changed means two small API calls and no ingestion.
+- Full (the first pass, every RECONCILE, and the admin's "Sync now"): every page/issue, which is
+  also the only way to notice deletions, since deleted items never show up as "changed".
+
 Rules
 - Every page/issue goes through the normal ingestion pipeline; unchanged ones are skipped there.
 - New spaces/projects/channels become containers with tier=hidden, mapped=false (default-deny,
@@ -15,10 +21,12 @@ Rules
 """
 
 import logging
+import math
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select, update
+from sqlalchemy.orm import load_only
 
 from brain.db.models import Container, SourceItem
 from brain.db.session import tenant_session
@@ -27,7 +35,31 @@ from brain.ingestion.types import CONTAINER_KIND, IngestItem
 from brain.integrations import store
 from brain.integrations.atlassian import AtlassianClient, AtlassianError, issue_item, page_to_item
 
+# The worker runs these on every pass, so leave out the item bodies (raw_text, pii_spans): they are
+# most of each row and only cost network transfer from the database.
+_LIGHT = load_only(
+    SourceItem.id, SourceItem.type, SourceItem.container_id, SourceItem.external_ref,
+    SourceItem.url, SourceItem.title, SourceItem.structured, SourceItem.created_at,
+)  # fmt: skip
+
 log = logging.getLogger(__name__)
+
+RECONCILE = timedelta(minutes=30)
+OVERLAP = timedelta(minutes=2)  # clock skew and saves that land while a pass runs
+
+
+def _since(meta: dict, now: datetime, full: bool | None) -> datetime | None:
+    """The incremental window start, or None when this pass must be a full one."""
+    if full:
+        return None
+    try:
+        cursor = datetime.fromisoformat(meta["cursor"])
+        last_full = datetime.fromisoformat(meta["last_full_at"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    if full is None and now - last_full >= RECONCILE:
+        return None
+    return cursor - OVERLAP
 
 
 async def ensure_containers(tenant_id: uuid.UUID, kind: str, found: list[tuple[str, str]],
@@ -82,9 +114,9 @@ async def _adopt_items(tenant_id: uuid.UUID, items: list[IngestItem], site: str)
         }
         existing = (
             await s.scalars(
-                select(SourceItem).where(
-                    SourceItem.source == source, SourceItem.deleted_at.is_(None)
-                )
+                select(SourceItem)
+                .options(_LIGHT)
+                .where(SourceItem.source == source, SourceItem.deleted_at.is_(None))
             )
         ).all()
         by_ref = {e.external_ref: e for e in existing}
@@ -131,6 +163,7 @@ async def _tombstones(tenant_id: uuid.UUID, source: str, live_refs: set[str]) ->
     async with tenant_session(tenant_id) as s:
         rows = (await s.execute(
             select(SourceItem, Container.external_id, Container.name)
+            .options(_LIGHT)
             .join(Container, (Container.id == SourceItem.container_id) & (Container.tenant_id == SourceItem.tenant_id))
             .where(SourceItem.source == source, SourceItem.deleted_at.is_(None), Container.source == kind)
         )).all()  # fmt: skip
@@ -144,19 +177,23 @@ async def _tombstones(tenant_id: uuid.UUID, source: str, live_refs: set[str]) ->
 
 
 async def sync_atlassian(
-    tenant_id: uuid.UUID, ingestor: Ingestor | None = None, transport=None
+    tenant_id: uuid.UUID, ingestor: Ingestor | None = None, transport=None, full: bool | None = None
 ) -> dict:
-    """One pass over the tenant's Confluence + Jira. Errors are recorded on the integration."""
+    """One pass over the tenant's Confluence + Jira. Errors are recorded on the integration.
+
+    full=None lets the schedule decide (see the module docstring); True forces a full pass."""
     async with tenant_session(tenant_id) as s:
         conf, jira = await store.get(s, "confluence"), await store.get(s, "jira")
         rows = [r for r in (conf, jira) if r is not None]
-        cfgs = {r.type: (r.id, store.config(r)) for r in rows}
+        cfgs = {r.type: (r.id, store.config(r), dict(r.meta or {})) for r in rows}
     if not cfgs:
         return {"skipped": "not_connected"}
     ingestor = ingestor or Ingestor()
     report: dict = {}
-    for type_, (iid, cfg) in cfgs.items():
+    for type_, (iid, cfg, prev) in cfgs.items():
         site = cfg["site"]
+        now = datetime.now(UTC)
+        since = _since(prev, now, full)
         try:
             async with AtlassianClient(site, cfg["email"], cfg["token"], transport=transport) as c:
                 if type_ == "confluence":
@@ -164,30 +201,49 @@ async def sync_atlassian(
                     await ensure_containers(
                         tenant_id, "confluence_space", [(sp.key, sp.name) for sp in spaces]
                     )
-                    items = [page_to_item(p, sp, site) for sp in spaces for p in await c.pages(sp)]
-                    meta = {"spaces": len(spaces), "pages": len(items)}
+                    if since is None:
+                        pages = [(p, sp) for sp in spaces for p in await c.pages(sp)]
+                    else:
+                        pages = [(p, sp) for sp in spaces for p in await c.pages_changed(sp, since)]
+                    items = [page_to_item(p, sp, site) for p, sp in pages]
+                    meta = {"spaces": len(spaces)}
                 else:
                     projects = await c.projects()
                     await ensure_containers(
                         tenant_id, "jira_project", [(p.key, p.name) for p in projects]
                     )
                     keys = ",".join(f'"{p.key}"' for p in projects)
+                    # A relative JQL window, so the Jira user's time zone doesn't matter.
+                    window = (
+                        f" AND updated >= -{math.ceil((now - since).total_seconds() / 60)}m"
+                        if since is not None
+                        else ""
+                    )
                     issues = (
-                        await c.search(f"project in ({keys}) ORDER BY updated DESC")
+                        await c.search(f"project in ({keys}){window} ORDER BY updated DESC")
                         if projects
                         else []
                     )
                     items = [issue_item(i, site) for i in issues]
-                    meta = {"projects": len(projects), "issues": len(items)}
-            adopted = await _adopt_items(tenant_id, items, site)
-            gone = await _tombstones(tenant_id, type_, {it.external_ref for it in items})
-            r = await ingestor.ingest(tenant_id, items + gone)
-            meta |= {
-                "last_created": r.created,
-                "last_updated": r.updated,
-                "last_deleted": r.deleted,
-                "adopted_total": adopted,
-            }
+                    meta = {"projects": len(projects)}
+            meta |= {"cursor": now.isoformat(), "last_mode": "incremental" if since else "full"}
+            if since is None:
+                meta |= {"last_full_at": now.isoformat(),
+                         "pages" if type_ == "confluence" else "issues": len(items)}  # fmt: skip
+            if since is None or items:
+                adopted = await _adopt_items(tenant_id, items, site) if items else 0
+                gone = (
+                    await _tombstones(tenant_id, type_, {it.external_ref for it in items})
+                    if since is None
+                    else []
+                )
+                r = await ingestor.ingest(tenant_id, items + gone)
+                meta |= {
+                    "last_created": r.created,
+                    "last_updated": r.updated,
+                    "last_deleted": r.deleted,
+                    "adopted_total": adopted,
+                }
             await store.mark(tenant_id, iid, synced=True, meta=meta)
             report[type_] = meta
         except AtlassianError as e:
@@ -198,3 +254,64 @@ async def sync_atlassian(
             await store.mark(tenant_id, iid, error=f"{type(e).__name__}: {e}"[:300])
             report[type_] = {"error": type(e).__name__}
     return report
+
+
+# --- Webhooks: one item at a time ------------------------------------------------------------------
+# A webhook only says which page/issue changed. The item itself is always read back from the site
+# with the tenant's own token, so a forged or stale request body can never inject content.
+
+
+async def _connection(tenant_id: uuid.UUID, type_: str) -> tuple[uuid.UUID, dict] | None:
+    async with tenant_session(tenant_id) as s:
+        row = await store.get(s, type_)
+        return (row.id, store.config(row)) if row is not None else None
+
+
+async def sync_page(tenant_id: uuid.UUID, page_id: str, ingestor: Ingestor | None = None,
+                    transport=None) -> dict:  # fmt: skip
+    conn = await _connection(tenant_id, "confluence")
+    if conn is None:
+        return {"skipped": "not_connected"}
+    _, cfg = conn
+    async with AtlassianClient(cfg["site"], cfg["email"], cfg["token"], transport=transport) as c:
+        try:
+            page = await c.page(page_id)
+        except AtlassianError as e:
+            if e.reason == "not_found":  # deleted, or not readable with our token
+                return {"skipped": "not_found"}
+            raise
+        space = next((sp for sp in await c.spaces() if sp.id == str(page.get("spaceId"))), None)
+    if space is None or str(page.get("id")) == space.homepage_id:
+        return {"skipped": "not_synced_space"}  # personal space or a space homepage
+    await ensure_containers(tenant_id, "confluence_space", [(space.key, space.name)])
+    item = page_to_item(page, space, cfg["site"])
+    await _adopt_items(tenant_id, [item], cfg["site"])
+    r = await (ingestor or Ingestor()).ingest(tenant_id, [item])
+    return {"page": page_id, "created": r.created, "updated": r.updated}
+
+
+async def sync_issue(tenant_id: uuid.UUID, key: str, *, deleted: bool, project: tuple[str, str],
+                     ingestor: Ingestor | None = None, transport=None) -> dict:  # fmt: skip
+    """project = (key, name), from the webhook; only used to file a deletion."""
+    conn = await _connection(tenant_id, "jira")
+    if conn is None:
+        return {"skipped": "not_connected"}
+    _, cfg = conn
+    ingestor = ingestor or Ingestor()
+    if deleted:
+        gone = IngestItem(source="jira", container_external_id=project[0], container_name=project[1],
+                          external_ref=key, type="task", text="", created_at=datetime.now(UTC),
+                          updated_at=datetime.now(UTC), deleted=True)  # fmt: skip
+        r = await ingestor.ingest(tenant_id, [gone])
+        return {"issue": key, "deleted": r.deleted}
+    async with AtlassianClient(cfg["site"], cfg["email"], cfg["token"], transport=transport) as c:
+        issues = await c.search(f'key = "{key}"')
+    if not issues:
+        return {"skipped": "not_found"}
+    item = issue_item(issues[0], cfg["site"])
+    await ensure_containers(
+        tenant_id, "jira_project", [(item.container_external_id, item.container_name)]
+    )
+    await _adopt_items(tenant_id, [item], cfg["site"])
+    r = await ingestor.ingest(tenant_id, [item])
+    return {"issue": key, "created": r.created, "updated": r.updated}

@@ -108,3 +108,23 @@ async def mark(tenant_id: uuid.UUID, integration_id: uuid.UUID, *, error: str | 
         await s.execute(
             update(Integration).where(Integration.id == integration_id).values(**values)
         )
+
+
+async def patch(tenant_id: uuid.UUID, type_: str, *, cfg: dict | None = None,
+                meta: dict | None = None) -> Integration | None:  # fmt: skip
+    """Merge keys into the tenant's integration of this type: `cfg` into the encrypted
+    credentials, `meta` into the visible metadata. A None value removes the key."""
+    async with tenant_session(tenant_id) as s:
+        row = await get(s, type_)
+        if row is None:
+            return None
+        if cfg:
+            merged = {**config(row), **cfg}
+            row.config_encrypted = encrypt(
+                json.dumps({k: v for k, v in merged.items() if v is not None})
+            )
+        if meta:
+            merged = {**(row.meta or {}), **meta}
+            row.meta = {k: v for k, v in merged.items() if v is not None}
+        await s.flush()
+        return row
