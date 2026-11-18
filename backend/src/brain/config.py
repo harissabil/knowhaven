@@ -69,7 +69,7 @@ class Settings(BaseSettings):
     # Express-mode embeddings measured ~11 s/call (2026-10-24); the embedding keeps running in the
     # background and fills the cache for the next search.
     retrieval_vector_wait_s: float = 12.0
-    sync_interval_s: int = 120  # worker: Confluence/Jira polling period
+    sync_interval_s: int = 900  # worker: Confluence/Jira polling period; above Neon's 5-min suspend
 
     slack_client_id: str = ""
     slack_client_secret: str = ""

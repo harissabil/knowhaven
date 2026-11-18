@@ -19,6 +19,7 @@ import uuid
 from datetime import UTC, datetime
 
 from sqlalchemy import select, update
+from sqlalchemy.orm import load_only
 
 from brain.db.models import Container, SourceItem
 from brain.db.session import tenant_session
@@ -26,6 +27,13 @@ from brain.ingestion.pipeline import Ingestor
 from brain.ingestion.types import CONTAINER_KIND, IngestItem
 from brain.integrations import store
 from brain.integrations.atlassian import AtlassianClient, AtlassianError, issue_item, page_to_item
+
+# The worker runs these on every pass, so leave out the item bodies (raw_text, pii_spans): they are
+# most of each row and only cost network transfer from the database.
+_LIGHT = load_only(
+    SourceItem.id, SourceItem.type, SourceItem.container_id, SourceItem.external_ref,
+    SourceItem.url, SourceItem.title, SourceItem.structured, SourceItem.created_at,
+)  # fmt: skip
 
 log = logging.getLogger(__name__)
 
@@ -82,9 +90,9 @@ async def _adopt_items(tenant_id: uuid.UUID, items: list[IngestItem], site: str)
         }
         existing = (
             await s.scalars(
-                select(SourceItem).where(
-                    SourceItem.source == source, SourceItem.deleted_at.is_(None)
-                )
+                select(SourceItem)
+                .options(_LIGHT)
+                .where(SourceItem.source == source, SourceItem.deleted_at.is_(None))
             )
         ).all()
         by_ref = {e.external_ref: e for e in existing}
@@ -131,6 +139,7 @@ async def _tombstones(tenant_id: uuid.UUID, source: str, live_refs: set[str]) ->
     async with tenant_session(tenant_id) as s:
         rows = (await s.execute(
             select(SourceItem, Container.external_id, Container.name)
+            .options(_LIGHT)
             .join(Container, (Container.id == SourceItem.container_id) & (Container.tenant_id == SourceItem.tenant_id))
             .where(SourceItem.source == source, SourceItem.deleted_at.is_(None), Container.source == kind)
         )).all()  # fmt: skip
