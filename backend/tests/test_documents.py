@@ -10,6 +10,7 @@ from brain.ingestion.extract import DictionaryExtractor
 from brain.ingestion.pipeline import Ingestor
 from brain.main import app
 from tests.conftest import FakeEmbedder
+from tests.test_parsers import _tiny_pdf
 
 pytestmark = pytest.mark.skipif(
     not get_settings().app_database_url, reason="Neon env not configured"
@@ -139,6 +140,26 @@ async def test_original_file_only_when_its_personal_data_is_allowed(org):
     assert (await hr.get("/api/documents/DOC-data-karyawan")).json()["can_download"] is True
     link = (await hr.get("/api/documents/DOC-data-karyawan/original")).json()
     assert link["url"].startswith("http") and link["filename"] == "data-karyawan.md"
+
+
+async def test_pdf_preview_is_inline_and_follows_the_original_rule(org):
+    """The in-page viewer gets the PDF from our API (storage sends files as attachments)."""
+    admin, member, folder, _ = org
+    cid = await folder("Panduan", ["staff"])
+    (pdf,) = (await _upload(admin, cid, "onboarding.pdf", _tiny_pdf(["Paket Onboarding"])))[
+        "item_ids"
+    ]
+    (md,) = (await _upload(admin, cid, "catatan.md", POLICY))["item_ids"]
+    staff, outsider = await member("staff"), await member("hr")
+
+    r = await staff.get(f"/api/documents/{pdf}/preview")
+    assert r.status_code == 200 and r.content.startswith(b"%PDF-")
+    assert r.headers["content-type"] == "application/pdf"
+    assert r.headers["content-disposition"].startswith("inline;")
+    assert r.headers["x-content-type-options"] == "nosniff"
+    # Only PDFs render on our origin; other files keep the download link.
+    assert (await staff.get(f"/api/documents/{md}/preview")).status_code == 415
+    assert (await outsider.get(f"/api/documents/{pdf}/preview")).status_code == 404
 
 
 async def test_company_profile_is_known_to_every_member(org):

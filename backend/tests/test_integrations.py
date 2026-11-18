@@ -200,7 +200,10 @@ def _atlassian_mock(
             flows[u] = {**json.loads(req.content)["rule"], "state": flows[u]["state"]}
             return httpx.Response(200, json={"ruleUuid": u})
         if req.method == "DELETE":
-            if flows[u]["state"] != "DISABLED" or req.headers.get("content-type") != "application/json":
+            if (
+                flows[u]["state"] != "DISABLED"
+                or req.headers.get("content-type") != "application/json"
+            ):
                 return httpx.Response(400 if flows[u]["state"] != "DISABLED" else 415, json={})
             del flows[u]
             return httpx.Response(200)
@@ -666,19 +669,29 @@ async def test_confluence_automation_install(make_user):
     """Knowhaven installs both flows through the Automation API, running as the connected
     account (an imported flow gets the Automation bot as actor and won't enable)."""
     admin, _ = await _company(make_user, "PT Flows")
-    flows: dict = {"old": {"name": "Knowhaven: page updated", "state": "DISABLED",
-                           "actor": {"type": "ACCOUNT_ID", "actor": "bot"}}}  # a flow imported earlier
+    flows: dict = {
+        "old": {
+            "name": "Knowhaven: page updated",
+            "state": "DISABLED",
+            "actor": {"type": "ACCOUNT_ID", "actor": "bot"},
+        }
+    }  # a flow imported earlier
     site, transport = _atlassian_mock({}, name="acme-flows", flows=flows)
     atlassian.default_transport = transport
     r = await admin.post("/api/admin/integrations/atlassian",
                          json={"site_url": site, "email": "t@x.id", "api_token": "secret-token-1234"})  # fmt: skip
     assert r.status_code == 200, r.text
-    token = (await admin.get("/api/admin/integrations/atlassian/webhooks")).json()["confluence"]["token"]
+    token = (await admin.get("/api/admin/integrations/atlassian/webhooks")).json()["confluence"][
+        "token"
+    ]
 
     r = await admin.post("/api/admin/integrations/confluence/automation")
     assert r.status_code == 200, r.text
     # The imported flow is repaired in place, the missing one created: no duplicates.
-    assert sorted(r["name"] for r in flows.values()) == ["Knowhaven: page published", "Knowhaven: page updated"]
+    assert sorted(r["name"] for r in flows.values()) == [
+        "Knowhaven: page published",
+        "Knowhaven: page updated",
+    ]
     assert "old" in flows
     for f in flows.values():
         assert f["state"] == "ENABLED" and f["actor"] == {"type": "ACCOUNT_ID", "actor": "acc1"}
@@ -695,7 +708,9 @@ async def test_confluence_automation_install(make_user):
     # Rotating the token pushes the new one into the installed flows.
     r = (await admin.post("/api/admin/integrations/confluence/webhook-token")).json()
     assert r["flows_updated"] and r["token"] != token
-    assert {f["components"][0]["value"]["headers"][0]["value"] for f in flows.values()} == {r["token"]}
+    assert {f["components"][0]["value"]["headers"][0]["value"] for f in flows.values()} == {
+        r["token"]
+    }
 
     # Disconnecting removes them from the site.
     assert (await admin.delete("/api/admin/integrations/atlassian")).status_code == 204
