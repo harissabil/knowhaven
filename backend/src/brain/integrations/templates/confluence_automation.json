@@ -2,10 +2,22 @@
   "cloud": true,
   "rules": [
     {
+      "id": 465872370376484,
+      "clientKey": "66126f9f-dd71-475d-881f-6ddedab06776",
       "name": "Knowhaven: page published",
       "state": "DISABLED",
       "description": "Tells Knowhaven which page changed; Knowhaven reads the page itself.",
+      "authorAccountId": "{{ACTOR_ID}}",
+      "actor": {
+        "type": "ACCOUNT_ID",
+        "value": "{{ACTOR_ID}}"
+      },
+      "created": 1794993757236,
+      "updated": 1794993872507,
       "trigger": {
+        "id": "9d517afe-85f2-4492-baff-b05b75dfecaa",
+        "parentId": null,
+        "conditionParentId": null,
         "component": "TRIGGER",
         "type": "confluence.page-published.trigger",
         "value": {
@@ -15,10 +27,15 @@
         },
         "conditions": [],
         "children": [],
-        "schemaVersion": 1
+        "schemaVersion": 1,
+        "connectionId": null,
+        "checksum": null
       },
       "components": [
         {
+          "id": "e4b64bc6-fe15-4c4e-a684-3d916d6bb666",
+          "parentId": null,
+          "conditionParentId": null,
           "component": "ACTION",
           "type": "outgoing.webhook",
           "value": {
@@ -26,14 +43,16 @@
             "urlSecure": false,
             "headers": [
               {
+                "id": "_header_1794993478412",
                 "name": "Content-Type",
                 "value": "application/json",
                 "headerSecure": false
               },
               {
+                "id": "_header_1794993706834",
                 "name": "X-Knowhaven-Token",
                 "value": "{{TOKEN}}",
-                "headerSecure": true
+                "headerSecure": false
               }
             ],
             "sendIssue": false,
@@ -45,14 +64,41 @@
           },
           "conditions": [],
           "children": [],
-          "schemaVersion": 1
+          "schemaVersion": 1,
+          "connectionId": null,
+          "checksum": null
         }
       ],
       "canOtherRuleTrigger": false,
       "notifyOnError": "FIRSTERROR",
       "projects": [],
       "labels": [],
-      "tags": [],
+      "tags": [
+        {
+          "id": 465874321768788,
+          "ruleIdUuid": "01a1edf7-1c34-7571-ae59-1cc9c2fee9b3",
+          "tagType": "ORCHESTRATION_CONFIG_ID",
+          "tagValue": "dd2702a5-e331-11f1-ad43-f7c56f3a43be"
+        },
+        {
+          "id": 465874299723163,
+          "ruleIdUuid": "01a1edf7-1c34-7571-ae59-1cc9c2fee9b3",
+          "tagType": "ORCHESTRATION_VERSION",
+          "tagValue": "2"
+        },
+        {
+          "id": 465874299723164,
+          "ruleIdUuid": "01a1edf7-1c34-7571-ae59-1cc9c2fee9b3",
+          "tagType": "IS_RULE_AN_ORCHESTRATION",
+          "tagValue": "true"
+        },
+        {
+          "id": 465874299723165,
+          "ruleIdUuid": "01a1edf7-1c34-7571-ae59-1cc9c2fee9b3",
+          "tagType": "IS_RULE_UPDATED",
+          "tagValue": "true"
+        }
+      ],
       "ruleScope": {
         "resources": [
           "{{SITE_ARI}}"
@@ -69,27 +115,54 @@
       "writeAccessType": "UNRESTRICTED",
       "readAccessType": "UNRESTRICTED",
       "collaborators": [],
-      "billingType": "NORMAL"
+      "billingType": "NORMAL",
+      "idUuid": "01a1edf7-1c34-7571-ae59-1cc9c2fee9b3",
+      "partitionId": "01a16d61-3133-7ffe-a2a3-89d1530d8e3c",
+      "checksum": {
+        "version": 3,
+        "value": "041d8566330746e1fba78aad895ccbac76d7eedd5da9a87b4f858271472a4731"
+      },
+      "currentVersionId": null,
+      "ruleArchetype": null,
+      "draftId": null,
+      "editRestrictions": null
     },
     {
+      "id": 465873227456330,
+      "clientKey": "66126f9f-dd71-475d-881f-6ddedab06776",
       "name": "Knowhaven: page updated",
       "state": "DISABLED",
       "description": "Tells Knowhaven which page changed; Knowhaven reads the page itself.",
+      "authorAccountId": "{{ACTOR_ID}}",
+      "actor": {
+        "type": "ACCOUNT_ID",
+        "value": "{{ACTOR_ID}}"
+      },
+      "created": 1794993808568,
+      "updated": 1794993808568,
       "trigger": {
+        "id": "30912fad-b51d-447a-9155-bbb6b8dc05b6",
+        "parentId": null,
+        "conditionParentId": null,
         "component": "TRIGGER",
         "type": "confluence.page-updated.trigger",
         "value": {
-          "enableAdminKey": false,
           "eventFilters": [
             "{{SITE_ARI}}"
-          ]
+          ],
+          "enableAdminKey": false
         },
         "conditions": [],
         "children": [],
-        "schemaVersion": 1
+        "schemaVersion": 1,
+        "connectionId": null,
+        "checksum": null
       },
       "components": [
         {
+          "id": "9f2b85b0-31fb-4ad8-9f5a-9c365ec0c288",
+          "parentId": null,
+          "conditionParentId": null,
           "component": "ACTION",
           "type": "outgoing.webhook",
           "value": {
@@ -97,14 +170,16 @@
             "urlSecure": false,
             "headers": [
               {
+                "id": "_header_1794993478412",
                 "name": "Content-Type",
                 "value": "application/json",
                 "headerSecure": false
               },
               {
+                "id": "_header_1794993706834",
                 "name": "X-Knowhaven-Token",
                 "value": "{{TOKEN}}",
-                "headerSecure": true
+                "headerSecure": false
               }
             ],
             "sendIssue": false,
@@ -116,14 +191,35 @@
           },
           "conditions": [],
           "children": [],
-          "schemaVersion": 1
+          "schemaVersion": 1,
+          "connectionId": null,
+          "checksum": null
         }
       ],
       "canOtherRuleTrigger": false,
       "notifyOnError": "FIRSTERROR",
       "projects": [],
       "labels": [],
-      "tags": [],
+      "tags": [
+        {
+          "id": 465873227456333,
+          "ruleIdUuid": "01a1edf7-e4b8-712d-a979-e3dfcc092544",
+          "tagType": "IS_RULE_AN_ORCHESTRATION",
+          "tagValue": "true"
+        },
+        {
+          "id": 465873227456332,
+          "ruleIdUuid": "01a1edf7-e4b8-712d-a979-e3dfcc092544",
+          "tagType": "ORCHESTRATION_VERSION",
+          "tagValue": "1"
+        },
+        {
+          "id": 465873243898154,
+          "ruleIdUuid": "01a1edf7-e4b8-712d-a979-e3dfcc092544",
+          "tagType": "ORCHESTRATION_CONFIG_ID",
+          "tagValue": "b713b228-e331-11f1-a761-6514b4368cf2"
+        }
+      ],
       "ruleScope": {
         "resources": [
           "{{SITE_ARI}}"
@@ -140,7 +236,17 @@
       "writeAccessType": "UNRESTRICTED",
       "readAccessType": "UNRESTRICTED",
       "collaborators": [],
-      "billingType": "NORMAL"
+      "billingType": "NORMAL",
+      "idUuid": "01a1edf7-e4b8-712d-a979-e3dfcc092544",
+      "partitionId": "01a16d61-3133-7ffe-a2a3-89d1530d8e3c",
+      "checksum": {
+        "version": 3,
+        "value": "e93e8d1564826a39519674ec5ff8c489f5730402204eb9bee4b08311ab730e55"
+      },
+      "currentVersionId": null,
+      "ruleArchetype": null,
+      "draftId": null,
+      "editRestrictions": null
     }
   ]
 }

@@ -168,17 +168,51 @@ def select_item(ref: str):
 
 def _atlassian_mock(
     pages: dict[str, tuple[str, str, int]], token_ok: bool = True, calls: list | None = None,
-    recent: set[str] | None = None, name: str = "acme-test",
+    recent: set[str] | None = None, name: str = "acme-test", flows: dict | None = None,
+    automation_admin: bool = True,
 ):  # fmt: skip
     """pages: id -> (title, storage, version) in space HR; plus one Jira project OPS with one issue.
-    Pages in `recent` report a save time of now, the rest an old one."""
+    Pages in `recent` report a save time of now, the rest an old one. `flows` (uuid -> rule) backs
+    a fake Automation API; without `automation_admin` it answers 403 like Atlassian does."""
     site = f"https://{name}.atlassian.net"
+
+    def automation(req: httpx.Request) -> httpx.Response:
+        base = "/automation/public/confluence/cloud-123/rest/v1/rule"
+        p = req.url.path
+        if not automation_admin:
+            return httpx.Response(403, json={})
+        if p == f"{base}/summary":
+            return httpx.Response(200, json={"links": {}, "data": [
+                {"uuid": u, "name": r["name"], "state": r["state"]} for u, r in flows.items()]})  # fmt: skip
+        if p == base and req.method == "POST":
+            u = f"u{len(flows) + 1}"
+            flows[u] = json.loads(req.content)["rule"]
+            return httpx.Response(200, json={"ruleUuid": u})
+        u, *rest = p.removeprefix(base + "/").split("/")
+        if u not in flows:
+            return httpx.Response(404, json={})
+        if rest == ["state"]:
+            flows[u]["state"] = json.loads(req.content)["value"]
+            return httpx.Response(200)
+        if req.method == "GET":
+            return httpx.Response(200, json={"rule": flows[u], "connections": []})
+        if req.method == "PUT":
+            flows[u] = {**json.loads(req.content)["rule"], "state": flows[u]["state"]}
+            return httpx.Response(200, json={"ruleUuid": u})
+        if req.method == "DELETE":
+            if flows[u]["state"] != "DISABLED" or req.headers.get("content-type") != "application/json":
+                return httpx.Response(400 if flows[u]["state"] != "DISABLED" else 415, json={})
+            del flows[u]
+            return httpx.Response(200)
+        return httpx.Response(405, json={})
 
     def handler(req: httpx.Request) -> httpx.Response:
         if calls is not None:
             calls.append((req.method, req.url.path, req.content))
         if not token_ok:
             return httpx.Response(401, json={})
+        if req.url.host == "api.atlassian.com" and flows is not None:
+            return automation(req)
         p = req.url.path
         if p == "/_edge/tenant_info":
             return httpx.Response(200, json={"cloudId": "cloud-123"})
@@ -595,6 +629,7 @@ async def test_atlassian_webhooks(make_user):
     hook = rules[0]["components"][0]["value"]
     assert {x["state"] for x in rules} == {"DISABLED"} and hook["url"] == url
     assert rules[0]["ruleScope"]["resources"] == ["ari:cloud:confluence::site/cloud-123"]
+    assert {x["actor"]["value"] for x in rules} == {x["authorAccountId"] for x in rules} == {"acc1"}
     assert {h["name"]: h["value"] for h in hook["headers"]}["X-Knowhaven-Token"] == token
     assert "{{" not in r.text.replace("{{page.id}}", "").replace("{{space.key}}", "")
 
@@ -625,3 +660,59 @@ async def test_atlassian_webhooks(make_user):
     async with tenant_session(tenant) as s:
         issue = await s.scalar(select(SourceItem).where(SourceItem.external_ref == "OPS-1"))
     assert issue.deleted_at is not None
+
+
+async def test_confluence_automation_install(make_user):
+    """Knowhaven installs both flows through the Automation API, running as the connected
+    account (an imported flow gets the Automation bot as actor and won't enable)."""
+    admin, _ = await _company(make_user, "PT Flows")
+    flows: dict = {"old": {"name": "Knowhaven: page updated", "state": "DISABLED",
+                           "actor": {"type": "ACCOUNT_ID", "actor": "bot"}}}  # a flow imported earlier
+    site, transport = _atlassian_mock({}, name="acme-flows", flows=flows)
+    atlassian.default_transport = transport
+    r = await admin.post("/api/admin/integrations/atlassian",
+                         json={"site_url": site, "email": "t@x.id", "api_token": "secret-token-1234"})  # fmt: skip
+    assert r.status_code == 200, r.text
+    token = (await admin.get("/api/admin/integrations/atlassian/webhooks")).json()["confluence"]["token"]
+
+    r = await admin.post("/api/admin/integrations/confluence/automation")
+    assert r.status_code == 200, r.text
+    # The imported flow is repaired in place, the missing one created: no duplicates.
+    assert sorted(r["name"] for r in flows.values()) == ["Knowhaven: page published", "Knowhaven: page updated"]
+    assert "old" in flows
+    for f in flows.values():
+        assert f["state"] == "ENABLED" and f["actor"] == {"type": "ACCOUNT_ID", "actor": "acc1"}
+        (h,) = f["components"][0]["value"]["headers"]
+        assert h["name"] == "X-Knowhaven-Token" and h["value"] == token and h["headerSecure"]
+        assert f["ruleScopeARIs"] == ["ari:cloud:confluence::site/cloud-123"]
+    st = (await admin.get("/api/admin/integrations/confluence/automation")).json()
+    assert st["flows"] == {"published": "ENABLED", "updated": "ENABLED"} and st["installed_at"]
+
+    # Installing again changes nothing structurally.
+    assert (await admin.post("/api/admin/integrations/confluence/automation")).status_code == 200
+    assert len(flows) == 2
+
+    # Rotating the token pushes the new one into the installed flows.
+    r = (await admin.post("/api/admin/integrations/confluence/webhook-token")).json()
+    assert r["flows_updated"] and r["token"] != token
+    assert {f["components"][0]["value"]["headers"][0]["value"] for f in flows.values()} == {r["token"]}
+
+    # Disconnecting removes them from the site.
+    assert (await admin.delete("/api/admin/integrations/atlassian")).status_code == 204
+    assert flows == {}
+
+
+async def test_confluence_automation_needs_confluence_admin(make_user):
+    admin, _ = await _company(make_user, "PT Not Admin")
+    site, transport = _atlassian_mock({}, name="acme-noadmin", flows={}, automation_admin=False)
+    atlassian.default_transport = transport
+    r = await admin.post("/api/admin/integrations/atlassian",
+                         json={"site_url": site, "email": "t@x.id", "api_token": "secret-token-1234"})  # fmt: skip
+    assert r.status_code == 200, r.text
+    r = await admin.post("/api/admin/integrations/confluence/automation")
+    assert r.status_code == 502 and r.json()["detail"]["reason"] == "no_permission"
+    st = (await admin.get("/api/admin/integrations/confluence/automation")).json()
+    assert st["flows"] is None and st["reason"] == "no_permission"
+    # Rotating still works; there is nothing installed to update.
+    r = (await admin.post("/api/admin/integrations/confluence/webhook-token")).json()
+    assert r["flows_updated"] is False
