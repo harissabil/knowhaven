@@ -5,6 +5,7 @@ import hmac
 import json
 import time
 import uuid
+from datetime import UTC, datetime
 
 import httpx
 import pytest
@@ -166,10 +167,12 @@ def select_item(ref: str):
 
 
 def _atlassian_mock(
-    pages: dict[str, tuple[str, str, int]], token_ok: bool = True, calls: list | None = None
-):
-    """pages: id -> (title, storage, version) in space HR; plus one Jira project OPS with one issue."""
-    site = "https://acme-test.atlassian.net"
+    pages: dict[str, tuple[str, str, int]], token_ok: bool = True, calls: list | None = None,
+    recent: set[str] | None = None, name: str = "acme-test",
+):  # fmt: skip
+    """pages: id -> (title, storage, version) in space HR; plus one Jira project OPS with one issue.
+    Pages in `recent` report a save time of now, the rest an old one."""
+    site = f"https://{name}.atlassian.net"
 
     def handler(req: httpx.Request) -> httpx.Response:
         if calls is not None:
@@ -177,6 +180,8 @@ def _atlassian_mock(
         if not token_ok:
             return httpx.Response(401, json={})
         p = req.url.path
+        if p == "/_edge/tenant_info":
+            return httpx.Response(200, json={"cloudId": "cloud-123"})
         if p == "/rest/api/3/myself":
             return httpx.Response(200, json={"displayName": "Team SRN", "accountId": "acc1"})
         if p == "/wiki/api/v2/spaces":
@@ -184,6 +189,7 @@ def _atlassian_mock(
                 200, json={"results": [{"id": "100", "key": "HR", "name": "HR"}], "_links": {}}
             )
         if p == "/wiki/api/v2/spaces/100/pages":
+            now = datetime.now(UTC).isoformat()
             return httpx.Response(
                 200,
                 json={
@@ -192,7 +198,12 @@ def _atlassian_mock(
                             "id": pid,
                             "title": t,
                             "createdAt": "2026-10-01T02:00:00Z",
-                            "version": {"number": v, "createdAt": "2026-10-20T02:00:00Z"},
+                            "version": {
+                                "number": v,
+                                "createdAt": now
+                                if pid in (recent or ())
+                                else "2026-10-20T02:00:00Z",
+                            },
                             "body": {"storage": {"value": body}},
                             "_links": {"webui": f"/spaces/HR/pages/{pid}"},
                         }
@@ -208,6 +219,7 @@ def _atlassian_mock(
                 200,
                 json={
                     "id": pid,
+                    "spaceId": "100",
                     "title": t,
                     "createdAt": "2026-10-01T02:00:00Z",
                     "version": {"number": v, "createdAt": "2026-10-20T02:00:00Z"},
@@ -309,7 +321,7 @@ async def test_atlassian_connect_sync_adopt_and_delete(make_user):
     assert r.status_code == 200, r.text
     assert r.json()["spaces"] == ["HR"] and r.json()["projects"] == ["OPS"]
 
-    report = await sync.sync_atlassian(tenant, _ingestor())
+    report = await sync.sync_atlassian(tenant, _ingestor(), full=True)
     assert "error" not in report["confluence"] and report["jira"]["issues"] == 1
     async with tenant_session(tenant) as s:
         sop = await s.scalar(select(SourceItem).where(SourceItem.external_ref == "9001"))
@@ -330,9 +342,9 @@ async def test_atlassian_connect_sync_adopt_and_delete(make_user):
         "token_hint", ""
     )
 
-    # page removed in Confluence → no longer cited
+    # page removed in Confluence → no longer cited (deletions are found by full passes)
     pages.pop("9002")
-    await sync.sync_atlassian(tenant, _ingestor())
+    await sync.sync_atlassian(tenant, _ingestor(), full=True)
     async with tenant_session(tenant) as s:
         gone = await s.scalar(select(SourceItem).where(SourceItem.external_ref == "9002"))
     assert gone.deleted_at is not None
@@ -500,3 +512,116 @@ async def test_disconnect_frees_the_workspace_for_another_company(make_user):
     assert (await admin_a.delete("/api/admin/integrations/slack")).status_code == 404
     await store.upsert(tenant_b, "slack", team, {"bot_token": "xoxb-b"}, None, {})  # now free
     assert await store.resolve_tenant("slack", team) == tenant_b
+
+
+async def test_atlassian_incremental_pass(make_user):
+    admin, tenant = await _company(make_user, "PT Inkremental")
+    pages = {"9101": ("Panduan Cuti", "<h1>Panduan Cuti</h1><p>Cuti tahunan 12 hari.</p>", 1)}
+    recent: set[str] = set()
+    calls: list = []
+    site, transport = _atlassian_mock(pages, calls=calls, recent=recent, name="acme-incremental")
+    atlassian.default_transport = transport
+    r = await admin.post(
+        "/api/admin/integrations/atlassian",
+        json={"site_url": site, "email": "t@x.id", "api_token": "secret-token-1234"},
+    )
+    assert r.status_code == 200, r.text
+
+    first = await sync.sync_atlassian(tenant, _ingestor(), full=True)
+    assert first["confluence"]["last_mode"] == "full" and first["confluence"]["pages"] == 1
+
+    # Nothing changed: an incremental pass, nothing ingested, Jira asked only for recent updates.
+    calls.clear()
+    quiet = await sync.sync_atlassian(tenant, _ingestor())
+    assert quiet["confluence"]["last_mode"] == "incremental"
+    assert "last_created" not in quiet["confluence"]  # no page changed: nothing ingested
+    # (the mock returns OPS-1 for any JQL; it is recognised as unchanged)
+    assert quiet["jira"]["last_created"] == quiet["jira"]["last_updated"] == 0
+    jql = next(
+        json.loads(body)["jql"] for _, path, body in calls if path == "/rest/api/3/search/jql"
+    )
+    assert "updated >= -" in jql
+
+    # A page saved since the last pass is picked up without a full pass.
+    pages["9101"] = ("Panduan Cuti", "<h1>Panduan Cuti</h1><p>Cuti tahunan 14 hari.</p>", 2)
+    recent.add("9101")
+    changed = await sync.sync_atlassian(tenant, _ingestor())
+    assert changed["confluence"]["last_mode"] == "incremental"
+    assert changed["confluence"]["last_updated"] == 1
+    async with tenant_session(tenant) as s:
+        page = await s.scalar(select(SourceItem).where(SourceItem.external_ref == "9101"))
+    assert "14 hari" in page.raw_text
+
+
+async def test_atlassian_webhooks(make_user):
+    admin, tenant = await _company(make_user, "PT Webhook")
+    pages = {"9201": ("Panduan Lembur", "<h1>Panduan Lembur</h1><p>Uang makan Rp50.000.</p>", 1)}
+    site, transport = _atlassian_mock(pages, name="acme-webhook")
+    atlassian.default_transport = transport
+    r = await admin.post(
+        "/api/admin/integrations/atlassian",
+        json={"site_url": site, "email": "t@x.id", "api_token": "secret-token-1234"},
+    )
+    assert r.status_code == 200, r.text
+    hooks = (await admin.get("/api/admin/integrations/atlassian/webhooks")).json()
+    assert hooks["jira"]["url"].endswith("/api/integrations/jira/webhook")
+    assert hooks["jira"]["secret_hint"] is None
+
+    # Confluence Automation: the token is required and checked; the page is read back from the site.
+    url, token = hooks["confluence"]["url"], hooks["confluence"]["token"]
+    path = "/api/integrations/confluence/webhook"
+    assert url.endswith(path)
+    body = {"pageId": "9201", "event": "updated"}
+    assert (await admin.client.post(path, json=body)).status_code == 401
+    bad = token[:-4] + "0000"
+    assert (
+        await admin.client.post(path, json=body, headers={"X-Knowhaven-Token": bad})
+    ).status_code == 401
+    pages["9201"] = ("Panduan Lembur", "<h1>Panduan Lembur</h1><p>Uang makan Rp60.000.</p>", 2)
+    r = await admin.client.post(path, json=body, headers={"X-Knowhaven-Token": token})
+    assert r.status_code == 200, r.text
+    async with tenant_session(tenant) as s:
+        page = await s.scalar(select(SourceItem).where(SourceItem.external_ref == "9201"))
+    assert "Rp60.000" in page.raw_text
+
+    # The Automation template comes filled in for this site, URL and token, and switched off.
+    r = await admin.get("/api/admin/integrations/confluence/automation-template")
+    assert r.status_code == 200 and "attachment" in r.headers["content-disposition"]
+    rules = r.json()["rules"]
+    assert [x["trigger"]["type"] for x in rules] == [
+        "confluence.page-published.trigger",
+        "confluence.page-updated.trigger",
+    ]
+    hook = rules[0]["components"][0]["value"]
+    assert {x["state"] for x in rules} == {"DISABLED"} and hook["url"] == url
+    assert rules[0]["ruleScope"]["resources"] == ["ari:cloud:confluence::site/cloud-123"]
+    assert {h["name"]: h["value"] for h in hook["headers"]}["X-Knowhaven-Token"] == token
+    assert "{{" not in r.text.replace("{{page.id}}", "").replace("{{space.key}}", "")
+
+    # Rotating the token revokes the old one.
+    new = (await admin.post("/api/admin/integrations/confluence/webhook-token")).json()["token"]
+    assert new != token
+    assert (
+        await admin.client.post(path, json=body, headers={"X-Knowhaven-Token": token})
+    ).status_code == 401
+
+    # Jira: rejected until a secret is set, then only correctly signed bodies are accepted.
+    jira_path = "/api/integrations/jira/webhook"
+    event = {"webhookEvent": "jira:issue_deleted", "issue": {
+        "key": "OPS-1", "self": f"{site}/rest/api/3/issue/10001",
+        "fields": {"project": {"key": "OPS", "name": "Operasional"}}}}  # fmt: skip
+    raw = json.dumps(event).encode()
+    sig = "sha256=" + hmac.new(b"jira-secret-xyz", raw, hashlib.sha256).hexdigest()
+    headers = {"X-Hub-Signature": sig, "Content-Type": "application/json"}
+    assert (await admin.client.post(jira_path, content=raw, headers=headers)).status_code == 401
+    r = await admin.put(
+        "/api/admin/integrations/jira/webhook-secret", json={"secret": "jira-secret-xyz"}
+    )
+    assert r.json()["secret_hint"] == "••••-xyz"
+    assert "jira-secret-xyz" not in json.dumps((await admin.get("/api/admin/integrations")).json())
+    forged = {"X-Hub-Signature": "sha256=" + "0" * 64, "Content-Type": "application/json"}
+    assert (await admin.client.post(jira_path, content=raw, headers=forged)).status_code == 401
+    assert (await admin.client.post(jira_path, content=raw, headers=headers)).status_code == 200
+    async with tenant_session(tenant) as s:
+        issue = await s.scalar(select(SourceItem).where(SourceItem.external_ref == "OPS-1"))
+    assert issue.deleted_at is not None

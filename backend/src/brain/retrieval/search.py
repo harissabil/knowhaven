@@ -22,6 +22,7 @@ from sqlalchemy import (
     union_all,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import defer
 
 from brain.db.models import Chunk, Container, PiiPermission, SourceItem
 from brain.ingestion import pii
@@ -187,6 +188,7 @@ def _hit(row, policy: PiiPolicy) -> Hit:
 def _detail_query():
     return (
         select(Chunk, SourceItem, Container.name.label("container"))
+        .options(defer(Chunk.embedding))  # never read here; 768 floats per hit
         .join(
             SourceItem, (SourceItem.id == Chunk.item_id) & (SourceItem.tenant_id == Chunk.tenant_id)
         )

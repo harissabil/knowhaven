@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, Check, ExternalLink, Plug, RefreshCw, Unplug, UserRound } from "lucide-react";
+import { AlertTriangle, Check, Copy, Download, ExternalLink, Plug, RefreshCw, Unplug, UserRound, Zap } from "lucide-react";
 import { useSession } from "@/store/session";
 import { useL } from "@/lib/i18n";
 import { LOGOS } from "@/components/BrandLogos";
@@ -206,6 +206,7 @@ export function IntegrationCards({ tid }: { tid: string }) {
                 <button className="btn" disabled={busy === "sync"} onClick={syncNow}><RefreshCw size={16} className={busy === "sync" ? "animate-spin" : ""} /> {busy === "sync" ? l("Menyinkronkan…", "Syncing…") : l("Sinkronkan sekarang", "Sync now")}</button>
                 <button className="btn" disabled={busy === "off-atlassian"} onClick={() => disconnect("atlassian")}><Unplug size={16} /> {l("Putuskan", "Disconnect")}</button>
               </div>
+              <AtlassianWebhooks />
             </>
           ) : (
             <form className="flex flex-col gap-2 max-w-md" onSubmit={(e) => { e.preventDefault(); connectAtlassian(); }}>
@@ -222,6 +223,102 @@ export function IntegrationCards({ tid }: { tid: string }) {
 
       {(slack || atl) && <SourceAccessSetup refreshKey={loads} />}
     </div>
+  );
+}
+
+type Hooks = { jira: { url: string; secret_hint: string | null }; confluence: { url: string; token: string } };
+
+function CopyField({ label, value, hide }: { label: string; value: string; hide?: boolean }) {
+  const l = useL();
+  const copy = () => navigator.clipboard.writeText(value).then(() => toast(l("Disalin", "Copied")));
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-xs text-muted">{label}</span>
+      <div className="flex gap-2">
+        <input className="input font-mono !text-xs" readOnly value={hide ? "•".repeat(24) : value} aria-label={label} />
+        <button type="button" className="btn !px-2" onClick={copy} aria-label={l(`Salin ${label}`, `Copy ${label}`)}><Copy size={15} /></button>
+      </div>
+    </div>
+  );
+}
+
+/** Optional push: a Jira admin webhook and two Confluence Automation flows. Without them the
+ * 2-minute poll still picks every change up; with them a change shows up within seconds. */
+function AtlassianWebhooks() {
+  const l = useL();
+  const [h, setH] = useState<Hooks | null>(null);
+  const [secret, setSecret] = useState("");
+  const [busy, setBusy] = useState("");
+  const [err, setErr] = useState("");
+
+  useEffect(() => {
+    apiFetch<Hooks>("/api/admin/integrations/atlassian/webhooks").then(setH).catch((e) => setErr(errorText(e)));
+  }, []);
+
+  async function run(key: string, fn: () => Promise<void>) {
+    setBusy(key);
+    setErr("");
+    try { await fn(); } catch (e) { setErr(errorText(e)); } finally { setBusy(""); }
+  }
+  const saveSecret = (value: string) => run("secret", async () => {
+    const r = await apiFetch<{ secret_hint: string | null }>("/api/admin/integrations/jira/webhook-secret", { method: "PUT", body: JSON.stringify({ secret: value }) });
+    setSecret("");
+    setH((x) => x && { ...x, jira: { ...x.jira, secret_hint: r.secret_hint } });
+    toast(value ? l("Secret Jira disimpan", "Jira secret saved") : l("Secret Jira dihapus", "Jira secret removed"));
+  });
+  const rotate = () => run("rotate", async () => {
+    const r = await apiFetch<{ token: string }>("/api/admin/integrations/confluence/webhook-token", { method: "POST" });
+    setH((x) => x && { ...x, confluence: { ...x.confluence, token: r.token } });
+    toast(l("Token baru dibuat. Perbarui header di kedua flow Automation.", "New token created. Update the header in both Automation flows."));
+  });
+  const download = () => run("template", async () => {
+    const data = await apiFetch<unknown>("/api/admin/integrations/confluence/automation-template");
+    const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
+    const a = Object.assign(document.createElement("a"), { href: url, download: "knowhaven-confluence-automation.json" });
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  return (
+    <details className="border-t border-line pt-3">
+      <summary className="cursor-pointer font-medium text-sm"><Zap size={15} className="inline mr-1.5 -mt-0.5" />{l("Opsional: update instan lewat webhook", "Optional: instant updates via webhooks")}</summary>
+      <p className="text-xs text-muted mt-2">{l("Tanpa ini pun semua perubahan tetap masuk lewat sinkron otomatis tiap ±2 menit. Webhook hanya memberi tahu halaman/issue mana yang berubah; Knowhaven selalu membaca isinya langsung dari Atlassian.",
+        "Without this, every change still arrives through the automatic sync about every 2 minutes. A webhook only says which page/issue changed; Knowhaven always reads the content from Atlassian itself.")}</p>
+      {err && <p role="alert" className="text-bad text-sm mt-2">{err}</p>}
+      {!h ? (!err && <p className="text-sm text-muted animate-pulse mt-2">{l("Memuat…", "Loading…")}</p>) : (
+        <div className="grid md:grid-cols-2 gap-4 mt-3">
+          <div className="flex flex-col gap-2">
+            <h5 className="font-medium text-sm">Jira</h5>
+            <ol className="text-xs text-muted list-decimal pl-4 space-y-0.5">
+              <li>{l("Jira → ⚙ System → WebHooks → Create a WebHook.", "Jira → ⚙ System → WebHooks → Create a WebHook.")}</li>
+              <li>{l("Tempel URL di bawah, klik Generate secret, centang Issue: created, updated, deleted.", "Paste the URL below, click Generate secret, tick Issue: created, updated, deleted.")}</li>
+              <li>{l("Tempel secret yang sama di sini, lalu simpan.", "Paste the same secret here and save.")}</li>
+            </ol>
+            <CopyField label="URL" value={h.jira.url} />
+            <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); saveSecret(secret); }}>
+              <input className="input" type="password" autoComplete="off" value={secret} onChange={(e) => setSecret(e.target.value)}
+                placeholder={h.jira.secret_hint ? l(`Tersimpan (${h.jira.secret_hint})`, `Saved (${h.jira.secret_hint})`) : l("Secret dari Jira", "Secret from Jira")}
+                aria-label={l("Secret webhook Jira", "Jira webhook secret")} />
+              <button className="btn" disabled={!secret || busy === "secret"}>{l("Simpan", "Save")}</button>
+              {h.jira.secret_hint && <button type="button" className="btn" disabled={busy === "secret"} onClick={() => saveSecret("")}>{l("Hapus", "Remove")}</button>}
+            </form>
+          </div>
+          <div className="flex flex-col gap-2">
+            <h5 className="font-medium text-sm">Confluence Automation</h5>
+            <ol className="text-xs text-muted list-decimal pl-4 space-y-0.5">
+              <li>{l("Unduh template di bawah (sudah berisi URL dan token perusahaan ini).", "Download the template below (it already holds this company's URL and token).")}</li>
+              <li>{l("Confluence → ⚙ Settings → Automation → ⋯ → Import, pilih file tadi.", "Confluence → ⚙ Settings → Automation → ⋯ → Import, choose that file.")}</li>
+              <li>{l("Buka kedua flow, pastikan header X-Knowhaven-Token terisi, lalu Enable.", "Open both flows, check the X-Knowhaven-Token header is filled in, then Enable.")}</li>
+            </ol>
+            <button type="button" className="btn w-fit" disabled={busy === "template"} onClick={download}><Download size={16} /> {l("Unduh template Automation", "Download Automation template")}</button>
+            <CopyField label="URL" value={h.confluence.url} />
+            <CopyField label="X-Knowhaven-Token" value={h.confluence.token} hide />
+            <button type="button" className="btn w-fit !text-xs" disabled={busy === "rotate"} onClick={rotate}><RefreshCw size={14} /> {l("Buat token baru", "New token")}</button>
+            <p className="text-xs text-muted">{l("Confluence Free memberi 200 step Automation per bulan. Kalau habis, sinkron 2 menit tetap berjalan.", "Confluence Free includes 200 Automation steps a month. If they run out, the 2-minute sync keeps working.")}</p>
+          </div>
+        </div>
+      )}
+    </details>
   );
 }
 

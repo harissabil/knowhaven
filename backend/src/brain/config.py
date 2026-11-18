@@ -75,12 +75,14 @@ class Settings(BaseSettings):
     slack_client_secret: str = ""
     slack_signing_secret: str = ""
 
-    # Neon Object Storage (S3-compatible, Neon-managed AWS_* vars).
+    # S3-compatible object storage (Tencent COS in production, Neon Object Storage before).
     aws_access_key_id: str = ""
     aws_secret_access_key: str = ""
     aws_endpoint_url_s3: str = ""
     aws_region: str = ""
     storage_bucket: str = "uploads"
+    # "virtual" for Tencent COS (it rejects path-style requests), "path" for Neon.
+    s3_addressing_style: str = "virtual"
 
 
 @lru_cache

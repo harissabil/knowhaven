@@ -1,0 +1,146 @@
+{
+  "cloud": true,
+  "rules": [
+    {
+      "name": "Knowhaven: page published",
+      "state": "DISABLED",
+      "description": "Tells Knowhaven which page changed; Knowhaven reads the page itself.",
+      "trigger": {
+        "component": "TRIGGER",
+        "type": "confluence.page-published.trigger",
+        "value": {
+          "eventFilters": [
+            "{{SITE_ARI}}"
+          ]
+        },
+        "conditions": [],
+        "children": [],
+        "schemaVersion": 1
+      },
+      "components": [
+        {
+          "component": "ACTION",
+          "type": "outgoing.webhook",
+          "value": {
+            "url": "{{URL}}",
+            "urlSecure": false,
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/json",
+                "headerSecure": false
+              },
+              {
+                "name": "X-Knowhaven-Token",
+                "value": "{{TOKEN}}",
+                "headerSecure": true
+              }
+            ],
+            "sendIssue": false,
+            "contentType": "custom",
+            "customBody": "{\"pageId\": \"{{page.id}}\", \"spaceKey\": \"{{space.key}}\", \"event\": \"published\"}",
+            "method": "POST",
+            "responseEnabled": false,
+            "continueOnErrorEnabled": false
+          },
+          "conditions": [],
+          "children": [],
+          "schemaVersion": 1
+        }
+      ],
+      "canOtherRuleTrigger": false,
+      "notifyOnError": "FIRSTERROR",
+      "projects": [],
+      "labels": [],
+      "tags": [],
+      "ruleScope": {
+        "resources": [
+          "{{SITE_ARI}}"
+        ]
+      },
+      "ruleHome": {
+        "ruleLifecycleHome": {
+          "locationARI": "{{SITE_ARI}}"
+        },
+        "ruleBillingHome": {
+          "locationARI": "{{SITE_ARI}}"
+        }
+      },
+      "writeAccessType": "UNRESTRICTED",
+      "readAccessType": "UNRESTRICTED",
+      "collaborators": [],
+      "billingType": "NORMAL"
+    },
+    {
+      "name": "Knowhaven: page updated",
+      "state": "DISABLED",
+      "description": "Tells Knowhaven which page changed; Knowhaven reads the page itself.",
+      "trigger": {
+        "component": "TRIGGER",
+        "type": "confluence.page-updated.trigger",
+        "value": {
+          "enableAdminKey": false,
+          "eventFilters": [
+            "{{SITE_ARI}}"
+          ]
+        },
+        "conditions": [],
+        "children": [],
+        "schemaVersion": 1
+      },
+      "components": [
+        {
+          "component": "ACTION",
+          "type": "outgoing.webhook",
+          "value": {
+            "url": "{{URL}}",
+            "urlSecure": false,
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "application/json",
+                "headerSecure": false
+              },
+              {
+                "name": "X-Knowhaven-Token",
+                "value": "{{TOKEN}}",
+                "headerSecure": true
+              }
+            ],
+            "sendIssue": false,
+            "contentType": "custom",
+            "customBody": "{\"pageId\": \"{{page.id}}\", \"spaceKey\": \"{{space.key}}\", \"event\": \"updated\"}",
+            "method": "POST",
+            "responseEnabled": false,
+            "continueOnErrorEnabled": false
+          },
+          "conditions": [],
+          "children": [],
+          "schemaVersion": 1
+        }
+      ],
+      "canOtherRuleTrigger": false,
+      "notifyOnError": "FIRSTERROR",
+      "projects": [],
+      "labels": [],
+      "tags": [],
+      "ruleScope": {
+        "resources": [
+          "{{SITE_ARI}}"
+        ]
+      },
+      "ruleHome": {
+        "ruleLifecycleHome": {
+          "locationARI": "{{SITE_ARI}}"
+        },
+        "ruleBillingHome": {
+          "locationARI": "{{SITE_ARI}}"
+        }
+      },
+      "writeAccessType": "UNRESTRICTED",
+      "readAccessType": "UNRESTRICTED",
+      "collaborators": [],
+      "billingType": "NORMAL"
+    }
+  ]
+}

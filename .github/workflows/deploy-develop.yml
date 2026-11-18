@@ -1,5 +1,5 @@
 # Every push to develop: check backend + frontend, then deploy the whole stack to the
-# server named in the DEPLOY_HOST secret (docker compose: caddy, api, mcp, web).
+# server named in the DEPLOY_HOST secret (docker compose: caddy, db, api, mcp, worker, web).
 #
 # Required repository secrets:
 #   DEPLOY_HOST         server address (IP or hostname)
@@ -111,11 +111,11 @@ jobs:
 
           cd "$APP"
           sudo docker compose build
-          # Schema first (owner role from backend/.env); a failed migration stops the deploy
-          # before any service is restarted.
+          # Schema first (owner role from backend/.env; starts the db service if it isn't up); a
+          # failed migration stops the deploy before any service is restarted.
           # -T and </dev/null: this script itself arrives on stdin, and a container that reads stdin
           # would swallow the rest of it (the deploy then "succeeds" without restarting anything).
-          sudo docker compose run -T --rm --no-deps api alembic upgrade head </dev/null
+          sudo docker compose run -T --rm api alembic upgrade head </dev/null
           sudo docker compose up -d --remove-orphans
           # rsync swaps files by rename and Caddy's single-file bind mount keeps the old inode,
           # so restart it to pick up a changed Caddyfile.
