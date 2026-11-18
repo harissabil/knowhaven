@@ -231,10 +231,10 @@ Configuration is described in `.env.example`.
 |---|---|
 | Web app | Next.js 16, React 19 |
 | API and pipeline | FastAPI, SQLAlchemy (async), Agno |
-| Database and search | PostgreSQL on Neon with pgvector, full-text search and pg_trgm; forced row-level security |
-| File storage | Neon object storage (S3-compatible) for uploaded originals |
+| Database and search | PostgreSQL 18 with pgvector, full-text search and pg_trgm, self-hosted next to the app; forced row-level security |
+| File storage | Tencent Cloud Object Storage (COS, S3-compatible) for uploaded originals and nightly database backups |
 | Models | Gemini Flash models on Vertex AI (3.5 Flash-Lite, 3.6 Flash, 3.7 Flash) and Gemini embeddings |
 | WorkBuddy | MCP server (streamable HTTP) with personal tokens |
-| Integrations | Slack Events API and OAuth; Confluence and Jira synced by a worker every two minutes; uploads (PDF, DOCX, Markdown) and WhatsApp exports |
+| Integrations | Slack Events API and OAuth; Confluence and Jira synced by a worker (changes every two minutes, a full pass every 30 minutes), with optional instant updates from a Jira webhook and Confluence Automation flows that Knowhaven installs; uploads (PDF, DOCX, Markdown) and WhatsApp exports |
 | Hosting | Docker Compose on Tencent Cloud Lighthouse, Caddy for HTTPS |
 | Evaluation | `brain-eval` with a 58-question golden set |

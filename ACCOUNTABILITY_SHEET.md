@@ -47,8 +47,10 @@ logged.
   as one about a project that does not exist.
 - Trust a role or identity claimed in the chat ("saya HRD").
 - Follow instructions found inside documents or messages.
-- Change, send or delete anything without approval. Slack and Jira are read-only; its only write is
-  an approved update to a Confluence page or a new version of an uploaded document.
+- Change, send or delete anything without approval. Slack and Jira are read-only; its only content
+  write is an approved update to a Confluence page or a new version of an uploaded document. The
+  one other write is setup an admin starts: "Install automatically" creates two Confluence
+  Automation flows that only report which page changed, and disconnecting removes them.
 - Change or delete its own audit log.
 
 ## Known limitations
@@ -62,4 +64,5 @@ logged.
 - Only differing amounts and counts are treated as conflicts; differing wording is not.
 - Answers that combine chat, documents and Jira sometimes leave the chat source uncited.
 - Text sent to Gemini on Google Cloud is masked, except personal data the user may see and the
-  question needs. The application and database run on Tencent Cloud Lighthouse and Neon.
+  question needs. The application and database run on Tencent Cloud Lighthouse;
+  uploaded files and backups are in Tencent Cloud Object Storage.

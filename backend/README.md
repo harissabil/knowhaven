@@ -1,6 +1,8 @@
 # Workplace Brain: backend
 
-FastAPI + Agno + Lakebase Postgres on Neon (pgvector, RLS) + Neon Object Storage.
+FastAPI + Agno + Postgres (pgvector, RLS) + S3-compatible object storage.
+Production runs Postgres in Docker Compose next to the app and stores files in Tencent COS;
+local development below uses Neon branches.
 Plan and progress: [`../docs/backend-plan.md`](../docs/backend-plan.md).
 
 ## Quickstart (local)

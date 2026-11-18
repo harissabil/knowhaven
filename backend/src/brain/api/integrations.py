@@ -31,7 +31,7 @@ from brain.audit import log as audit
 from brain.db.models import Container, Integration, MemberProfile, Membership, User
 from brain.db.session import tenant_session
 from brain.ingestion.pipeline import Ingestor
-from brain.integrations import atlassian, slack, store, sync, webhooks
+from brain.integrations import atlassian, automation, slack, store, sync, webhooks
 from brain.rbac.context import load_context
 
 router = APIRouter(tags=["integrations"])
@@ -363,12 +363,33 @@ async def sync_atlassian_now(
     return report
 
 
+async def _remove_flows(tenant_id: uuid.UUID) -> None:
+    """Best effort: delete the Automation flows Knowhaven installed, so the site doesn't keep
+    calling a webhook that will now refuse it. Never blocks the disconnect."""
+    async with tenant_session(tenant_id) as s:
+        row = await store.get(s, "confluence")
+        cfg = (
+            store.config(row)
+            if row is not None and (row.meta or {}).get("automation_installed_at")
+            else None
+        )
+    if cfg is None:
+        return
+    try:
+        async with atlassian.AtlassianClient(cfg["site"], cfg["email"], cfg["token"]) as c:
+            await automation.remove(c)
+    except atlassian.AtlassianError as e:
+        log.warning("automation flows not removed on disconnect: %s %s", e.reason, e.detail)
+
+
 @router.delete("/admin/integrations/{kind}", status_code=status.HTTP_204_NO_CONTENT)
 async def disconnect(kind: Literal["slack", "atlassian"], ctx: Admin) -> None:
     """Stops syncing and deletes the integration with its credentials, which also frees the
     workspace/site for another company (it's unique across companies). Already-imported content
     stays, with its access rules, until an admin unmaps or removes it."""
     types = ["slack"] if kind == "slack" else ["confluence", "jira"]
+    if kind == "atlassian":
+        await _remove_flows(ctx.tenant_id)
     async with tenant_session(ctx.tenant_id) as s:
         gone = (await s.execute(
             delete(Integration).where(Integration.type.in_(types)).returning(Integration.type, Integration.external_workspace_id)
@@ -502,11 +523,17 @@ async def confluence_automation_template(ctx: Admin) -> Response:
     try:
         async with atlassian.AtlassianClient(cfg["site"], cfg["email"], cfg["token"]) as c:
             cloud_id = await c.cloud_id()
+            # Confluence's importer replaces the actor with its Automation bot anyway, so after an
+            # import the admin must set Actor by hand. The install endpoint below avoids that.
+            actor = (await c.check())["account_id"]
     except atlassian.AtlassianError as e:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, {"reason": e.reason}) from None
-    if not cloud_id:
-        raise HTTPException(status.HTTP_502_BAD_GATEWAY, {"reason": "no_cloud_id"})
-    values = {"SITE_ARI": f"ari:cloud:confluence::site/{cloud_id}", "URL": webhooks.urls()["confluence"],
+    if not cloud_id or not actor:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            {"reason": "no_cloud_id" if not cloud_id else "no_account_id"},
+        )
+    values = {"ACTOR_ID": actor, "SITE_ARI": f"ari:cloud:confluence::site/{cloud_id}", "URL": webhooks.urls()["confluence"],
               "TOKEN": webhooks.confluence_token(ctx.tenant_id, nonce)}  # fmt: skip
     body = AUTOMATION_TEMPLATE.read_text(encoding="utf-8")
     for k, v in values.items():
@@ -515,15 +542,83 @@ async def confluence_automation_template(ctx: Admin) -> Response:
         "Content-Disposition": 'attachment; filename="knowhaven-confluence-automation.json"'})  # fmt: skip
 
 
+async def _confluence_cfg(tenant_id: uuid.UUID) -> tuple[dict, dict]:
+    async with tenant_session(tenant_id) as s:
+        row = await store.get(s, "confluence")
+        if row is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "atlassian_not_connected")
+        return store.config(row), dict(row.meta or {})
+
+
+async def _install_flows(tenant_id: uuid.UUID, nonce: str) -> dict[str, str]:
+    cfg, _ = await _confluence_cfg(tenant_id)
+    async with atlassian.AtlassianClient(cfg["site"], cfg["email"], cfg["token"]) as c:
+        flows = await automation.install(
+            c, url=webhooks.urls()["confluence"], token=webhooks.confluence_token(tenant_id, nonce)
+        )
+    await store.patch(
+        tenant_id, "confluence", meta={"automation_installed_at": datetime.now(UTC).isoformat()}
+    )
+    return flows
+
+
+@router.get("/admin/integrations/confluence/automation")
+async def confluence_automation_status(ctx: Admin) -> dict:
+    """Live state of the two Knowhaven flows on the site: event → ENABLED | DISABLED | missing."""
+    cfg, meta = await _confluence_cfg(ctx.tenant_id)
+    try:
+        async with atlassian.AtlassianClient(cfg["site"], cfg["email"], cfg["token"]) as c:
+            flows = await automation.status(c)
+    except atlassian.AtlassianError as e:
+        return {
+            "flows": None,
+            "reason": e.reason,
+            "installed_at": meta.get("automation_installed_at"),
+        }
+    return {"flows": flows, "reason": None, "installed_at": meta.get("automation_installed_at")}
+
+
+@router.post("/admin/integrations/confluence/automation")
+async def install_confluence_automation(ctx: Admin) -> dict:
+    """Create (or repair) both flows through Atlassian's Automation API and enable them. They run
+    as the connected account, which must be a Confluence admin (else reason no_permission)."""
+    nonce = await _confluence_nonce(ctx.tenant_id)
+    if nonce is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "atlassian_not_connected")
+    try:
+        flows = await _install_flows(ctx.tenant_id, nonce)
+    except atlassian.AtlassianError as e:
+        log.warning("automation install failed: %s %s", e.reason, e.detail)
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, {"reason": e.reason}) from None
+    async with tenant_session(ctx.tenant_id) as s:
+        await audit.admin_event(s, ctx, "integration.confluence.automation_installed")
+    return {"flows": {k: "ENABLED" for k in flows}}
+
+
 @router.post("/admin/integrations/confluence/webhook-token")
 async def rotate_confluence_token(ctx: Admin) -> dict:
-    """New token; the old one stops working at once (update the Automation flows)."""
+    """New token; the old one stops working at once. Flows installed by Knowhaven get the new
+    token right away; imported ones must be edited by hand (`flows_updated` says which)."""
     nonce = await _confluence_nonce(ctx.tenant_id, rotate=True)
     if nonce is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "atlassian_not_connected")
+    _, meta = await _confluence_cfg(ctx.tenant_id)
+    updated, reason = False, None
+    if meta.get("automation_installed_at"):
+        try:
+            await _install_flows(ctx.tenant_id, nonce)
+            updated = True
+        except atlassian.AtlassianError as e:
+            reason = e.reason
     async with tenant_session(ctx.tenant_id) as s:
-        await audit.admin_event(s, ctx, "integration.confluence.webhook_token_rotated")
-    return {"token": webhooks.confluence_token(ctx.tenant_id, nonce)}
+        await audit.admin_event(
+            s, ctx, "integration.confluence.webhook_token_rotated", flows_updated=updated
+        )
+    return {
+        "token": webhooks.confluence_token(ctx.tenant_id, nonce),
+        "flows_updated": updated,
+        "reason": reason,
+    }
 
 
 @router.put("/admin/integrations/jira/webhook-secret")

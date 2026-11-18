@@ -6,7 +6,7 @@ import { useL } from "@/lib/i18n";
 import { LOGOS } from "@/components/BrandLogos";
 import { StatusChip } from "@/components/Chip";
 import { relTime } from "@/components/documents";
-import { apiFetch, errorText } from "@/lib/api";
+import { ApiError, apiFetch, errorText } from "@/lib/api";
 import type { IntegrationOut, IntegrationsOut, MemberOut, SlackUserOut } from "@/lib/contracts";
 import { toast } from "@/components/ui/Toast";
 import { SourceAccessSetup } from "@/components/SourceAccessSetup";
@@ -227,6 +227,8 @@ export function IntegrationCards({ tid }: { tid: string }) {
 }
 
 type Hooks = { jira: { url: string; secret_hint: string | null }; confluence: { url: string; token: string } };
+type FlowState = "ENABLED" | "DISABLED" | "missing";
+type Flows = { flows: { published: FlowState; updated: FlowState } | null; reason: string | null; installed_at: string | null };
 
 function CopyField({ label, value, hide }: { label: string; value: string; hide?: boolean }) {
   const l = useL();
@@ -251,9 +253,21 @@ function AtlassianWebhooks() {
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
 
+  const [flows, setFlows] = useState<Flows | null>(null);
+
   useEffect(() => {
     apiFetch<Hooks>("/api/admin/integrations/atlassian/webhooks").then(setH).catch((e) => setErr(errorText(e)));
+    apiFetch<Flows>("/api/admin/integrations/confluence/automation").then(setFlows).catch(() => setFlows(null));
   }, []);
+
+  // Atlassian's answer, in words an admin can act on.
+  const why = (reason: string | null | undefined) => reason === "no_permission"
+    ? l("Akun Atlassian yang terhubung bukan admin Confluence. Hubungkan akun admin, atau pakai template di bawah.",
+        "The connected Atlassian account is not a Confluence admin. Connect an admin account, or use the template below.")
+    : reason === "bad_credentials"
+      ? l("API token ditolak Atlassian. Hubungkan ulang dengan token yang masih berlaku.", "Atlassian rejected the API token. Reconnect with a valid token.")
+      : l(`Atlassian menolak permintaan (${reason ?? "error"}). Coba lagi, atau pakai template di bawah.`,
+          `Atlassian refused the request (${reason ?? "error"}). Try again, or use the template below.`);
 
   async function run(key: string, fn: () => Promise<void>) {
     setBusy(key);
@@ -266,10 +280,22 @@ function AtlassianWebhooks() {
     setH((x) => x && { ...x, jira: { ...x.jira, secret_hint: r.secret_hint } });
     toast(value ? l("Secret Jira disimpan", "Jira secret saved") : l("Secret Jira dihapus", "Jira secret removed"));
   });
+  const install = () => run("install", async () => {
+    try {
+      await apiFetch("/api/admin/integrations/confluence/automation", { method: "POST" });
+    } catch (e) {
+      const reason = e instanceof ApiError ? (e.payload?.detail as { reason?: string } | undefined)?.reason : undefined;
+      throw new Error(why(reason));
+    }
+    setFlows(await apiFetch<Flows>("/api/admin/integrations/confluence/automation"));
+    toast(l("Kedua flow Automation terpasang dan aktif", "Both Automation flows are installed and on"));
+  });
   const rotate = () => run("rotate", async () => {
-    const r = await apiFetch<{ token: string }>("/api/admin/integrations/confluence/webhook-token", { method: "POST" });
+    const r = await apiFetch<{ token: string; flows_updated: boolean }>("/api/admin/integrations/confluence/webhook-token", { method: "POST" });
     setH((x) => x && { ...x, confluence: { ...x.confluence, token: r.token } });
-    toast(l("Token baru dibuat. Perbarui header di kedua flow Automation.", "New token created. Update the header in both Automation flows."));
+    toast(r.flows_updated
+      ? l("Token baru dibuat dan sudah dipasang di kedua flow.", "New token created and pushed to both flows.")
+      : l("Token baru dibuat. Perbarui header di flow Automation Anda.", "New token created. Update the header in your Automation flows."));
   });
   const download = () => run("template", async () => {
     const data = await apiFetch<unknown>("/api/admin/integrations/confluence/automation-template");
@@ -305,20 +331,50 @@ function AtlassianWebhooks() {
           </div>
           <div className="flex flex-col gap-2">
             <h5 className="font-medium text-sm">Confluence Automation</h5>
-            <ol className="text-xs text-muted list-decimal pl-4 space-y-0.5">
-              <li>{l("Unduh template di bawah (sudah berisi URL dan token perusahaan ini).", "Download the template below (it already holds this company's URL and token).")}</li>
-              <li>{l("Confluence → ⚙ Settings → Automation → ⋯ → Import, pilih file tadi.", "Confluence → ⚙ Settings → Automation → ⋯ → Import, choose that file.")}</li>
-              <li>{l("Buka kedua flow, pastikan header X-Knowhaven-Token terisi, lalu Enable.", "Open both flows, check the X-Knowhaven-Token header is filled in, then Enable.")}</li>
-            </ol>
-            <button type="button" className="btn w-fit" disabled={busy === "template"} onClick={download}><Download size={16} /> {l("Unduh template Automation", "Download Automation template")}</button>
-            <CopyField label="URL" value={h.confluence.url} />
-            <CopyField label="X-Knowhaven-Token" value={h.confluence.token} hide />
+            <p className="text-xs text-muted">{l("Knowhaven memasang dua flow (halaman dipublikasikan / diubah) di Confluence Anda, berjalan atas nama akun Atlassian yang terhubung. Akun itu harus admin Confluence.",
+              "Knowhaven installs two flows (page published / updated) in your Confluence, running as the connected Atlassian account. That account must be a Confluence admin.")}</p>
+            <FlowStatus flows={flows} why={why} />
+            <button type="button" className="btn btn-primary w-fit" disabled={busy === "install"} onClick={install}>
+              <Zap size={16} /> {busy === "install" ? l("Memasang…", "Installing…")
+                : flows?.flows && Object.values(flows.flows).every((x) => x === "ENABLED") ? l("Pasang ulang", "Reinstall") : l("Pasang otomatis", "Install automatically")}
+            </button>
             <button type="button" className="btn w-fit !text-xs" disabled={busy === "rotate"} onClick={rotate}><RefreshCw size={14} /> {l("Buat token baru", "New token")}</button>
+            <details className="text-xs">
+              <summary className="cursor-pointer text-muted">{l("Pasang manual (kalau akun terhubung bukan admin)", "Manual setup (if the connected account isn't an admin)")}</summary>
+              <ol className="text-muted list-decimal pl-4 space-y-0.5 mt-2">
+                <li>{l("Unduh template, lalu di Confluence → ⚙ Settings → Automation → ⋯ → Import.", "Download the template, then in Confluence → ⚙ Settings → Automation → ⋯ → Import.")}</li>
+                <li>{l("Confluence selalu mengganti Actor dengan bot Automation, yang tidak bisa di-enable. Di tiap flow buka Settings, ganti Actor ke akun admin, simpan, lalu Enable.",
+                  "Confluence always sets the Actor to its Automation bot, which won't enable. In each flow open Settings, set Actor to an admin account, save, then Enable.")}</li>
+                <li>{l("Setelah token baru dibuat, perbarui header X-Knowhaven-Token di kedua flow.", "After a new token, update the X-Knowhaven-Token header in both flows.")}</li>
+              </ol>
+              <div className="flex flex-col gap-2 mt-2">
+                <button type="button" className="btn w-fit !text-xs" disabled={busy === "template"} onClick={download}><Download size={14} /> {l("Unduh template Automation", "Download Automation template")}</button>
+                <CopyField label="URL" value={h.confluence.url} />
+                <CopyField label="X-Knowhaven-Token" value={h.confluence.token} hide />
+              </div>
+            </details>
             <p className="text-xs text-muted">{l("Confluence Free memberi 200 step Automation per bulan. Kalau habis, sinkron 2 menit tetap berjalan.", "Confluence Free includes 200 Automation steps a month. If they run out, the 2-minute sync keeps working.")}</p>
           </div>
         </div>
       )}
     </details>
+  );
+}
+
+function FlowStatus({ flows, why }: { flows: Flows | null; why: (r: string | null) => string }) {
+  const l = useL();
+  if (!flows) return null;
+  if (!flows.flows) return <p className="text-xs text-warn flex gap-1.5"><AlertTriangle size={14} className="shrink-0 mt-0.5" />{why(flows.reason)}</p>;
+  const label = (k: "published" | "updated") => k === "published" ? l("Halaman dipublikasikan", "Page published") : l("Halaman diubah", "Page updated");
+  const state = (x: FlowState) => x === "ENABLED" ? l("aktif", "on") : x === "DISABLED" ? l("nonaktif", "off") : l("belum ada", "not installed");
+  return (
+    <ul className="text-xs space-y-0.5">
+      {(["published", "updated"] as const).map((k) => (
+        <li key={k} className={flows.flows![k] === "ENABLED" ? "text-good" : "text-muted"}>
+          {flows.flows![k] === "ENABLED" ? <Check size={13} className="inline mr-1 -mt-0.5" /> : "• "}{label(k)}: {state(flows.flows![k])}
+        </li>
+      ))}
+    </ul>
   );
 }
 
