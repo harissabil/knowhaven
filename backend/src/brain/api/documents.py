@@ -14,8 +14,9 @@ Who sees what (the same rules as everywhere else, design doc 4.3 / 8):
 import uuid
 from datetime import datetime
 from typing import Annotated
+from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile, status
 from pydantic import BaseModel
 from sqlalchemy import func, select
 
@@ -223,6 +224,24 @@ async def original(item_id: str, ctx: Member) -> dict:
         "url": storage.presigned_get_url(row.storage_key, expires_in=300),
         "filename": doc.filename,
     }
+
+
+@router.get("/{item_id}/preview")
+async def preview(item_id: str, ctx: Member) -> Response:
+    """The original PDF for the in-page viewer, same rule as `original`. Served by us because
+    COS's default domain sends every object as an attachment, so an iframe would download it.
+    PDF only (checked by its bytes): other uploads must never render on our own origin."""
+    doc, row = await _one(ctx, item_id)
+    if not doc.can_download:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "original_not_allowed")
+    data = await storage.get_object(row.storage_key)
+    if not data.startswith(b"%PDF-"):
+        raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, "preview_pdf_only")
+    return Response(data, media_type="application/pdf", headers={
+        "Content-Disposition": f"inline; filename*=UTF-8''{quote(doc.filename)}",
+        "Cache-Control": "private, no-store",
+        "X-Content-Type-Options": "nosniff",
+    })  # fmt: skip
 
 
 def _manageable(doc: DocumentOut) -> None:

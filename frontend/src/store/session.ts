@@ -68,7 +68,7 @@ interface State {
   /** Main sidebar shows icons only. */
   navCollapsed: boolean;
   wizards: Record<string, Wizard>;
-  /** Active chat conversation per tenant during this session ("new" = fresh chat, null/undefined = latest). */
+  /** Active chat conversation per tenant during this session ("new" or unset = fresh chat). */
   activeConversations: Record<string, string | null>;
   /** Store a MeOut from any endpoint that returns one (login, register, switch, create company). */
   applyMe: (me: MeOut) => CurrentUser;

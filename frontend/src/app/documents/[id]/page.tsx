@@ -148,7 +148,9 @@ export default function DocumentPage() {
           ) : (
             <div className={`grid gap-4 ${original && isPdf ? "lg:grid-cols-2" : ""}`}>
               {original && isPdf && (
-                <iframe title={doc.filename} src={original} className="card w-full h-[75vh] bg-surface2" />
+                // Served by our API: the storage link is sent as an attachment, so the browser
+                // would download it instead of showing it. "Download original" keeps that link.
+                <iframe title={doc.filename} src={`/api/documents/${encodeURIComponent(docId)}/preview`} className="card w-full h-[75vh] bg-surface2" />
               )}
               <div className="card p-5 flex flex-col gap-2">
                 <div className="flex items-center gap-2">

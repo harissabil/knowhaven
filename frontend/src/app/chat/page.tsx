@@ -175,7 +175,7 @@ export default function Chat() {
     [fmt],
   );
 
-  // Load conversations list and restore active conversation for this session (defaults to latest on login)
+  // Load conversations list and restore active conversation for this session (a new chat on login)
   useEffect(() => {
     if (!tenantId) return;
     let cancelled = false;
@@ -192,8 +192,9 @@ export default function Chat() {
           setMsgs([]);
           return;
         }
-        const target =
-          (desired ? webConvs.find((c) => c.id === desired) : undefined) ?? webConvs[0];
+        // Only reopen a conversation picked earlier in this session (e.g. back from another
+        // page). Right after login nothing is picked, so Havi starts with a new chat.
+        const target = desired ? webConvs.find((c) => c.id === desired) : undefined;
         if (!target) {
           setConversationId(null);
           setMsgs([]);
