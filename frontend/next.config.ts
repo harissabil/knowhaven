@@ -2,6 +2,9 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  experimental: {
+    agentUpgrade: "security", // remind about security advisories only, not every new release
+  },
   turbopack: {
     rules: {
       "*.css": {
