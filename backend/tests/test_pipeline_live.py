@@ -11,7 +11,7 @@ from sqlalchemy import func, select, text
 from brain.agent.pipeline import Pipeline
 from brain.api.chat import ask
 from brain.config import get_settings
-from brain.db.models import User
+from brain.db.models import AuditLog, User
 from brain.db.session import global_session, tenant_session
 from brain.rbac.context import load_context
 
@@ -136,3 +136,29 @@ async def test_t18_pii_masked_for_staff_open_for_hr():
 async def test_t28_other_tenant_sees_nothing():
     f = await q("wulan@klm-demo.id", "Proyek Kenari itu apa?", slug="klm")
     assert f["decision_path"] == "idk" and not any(c.startswith(KENARI) for c in cited(f))
+
+
+async def test_new_company_answers_from_its_profile(make_user):
+    """A company with no data yet still knows its own profile (was rejected as uncited -> idk)."""
+    owner = await make_user("Budi Santoso")
+    r = await owner.post("/api/tenants", json={"name": "PT Profil Baru", "industry": "Manufaktur"})
+    assert r.status_code == 201, r.text
+    tenant_id = uuid.UUID(r.json()["tenant_id"])
+    async with tenant_session(tenant_id) as s:
+        ctx = await load_context(s, tenant_id, uuid.UUID(owner.user_id))
+    for question, fact in (
+        ("I'm new here, what should I know?", "PT Profil Baru"),
+        ("Perusahaan ini bergerak di bidang apa?", "Manufaktur"),
+    ):
+        f = await ask(ctx, question, None, "web", Pipeline())
+        print(
+            f"\n[owner] {question}\n  -> {f['decision_path']} {[c['id'] for c in f['citations']]}\n  {f['answer']}"
+        )
+        if f["decision_path"] != "answer":  # show why: validation problems are in the audit row
+            async with tenant_session(tenant_id) as s:
+                details = await s.scalar(
+                    select(AuditLog.details).where(AuditLog.query_id == uuid.UUID(f["query_id"]))
+                )
+            pytest.fail(f"{f['decision_path']}: {f['answer']}\n{details}")
+        assert "COMPANY-profile" in cited(f)
+        assert fact in f["answer"]

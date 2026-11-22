@@ -300,6 +300,43 @@ def test_validation_rejects(answer, problem):
     assert not v.ok and any(p.startswith(problem) for p in v.problems), v.problems
 
 
+PROFILE = {"COMPANY-profile": "PT Test Second Company. Industry: Manufacturing."}
+
+
+def test_company_profile_is_a_citation():
+    # A new company with no documents yet: the profile is the only source (was rejected as
+    # no_citations, so every such answer fell back to "I don't know").
+    v = validate.validate(
+        "You are part of **PT Test Second Company**, which operates in the manufacturing sector "
+        "[COMPANY-profile].",
+        PROFILE, "I'm new here, what should I know?",
+    )  # fmt: skip
+    assert v.ok, v.problems
+    assert v.citations == ["COMPANY-profile"]
+
+    mixed = validate.validate(
+        "PT Test Second Company works in manufacturing [COMPANY-profile]. Fuel allowance is "
+        "Rp750.000 per month [CHAT-pengumuman-hr-0002].",
+        PROFILE | ALLOWED, "what should I know?",
+    )  # fmt: skip
+    assert mixed.ok, mixed.problems
+    assert mixed.citations == ["COMPANY-profile", "CHAT-pengumuman-hr-0002"]
+
+
+def test_company_profile_citation_still_needs_retrieval_and_exact_id():
+    q = "what should I know?"
+    not_retrieved = validate.validate(
+        "We work in the manufacturing sector here [COMPANY-profile].", ALLOWED, q
+    )
+    assert any(p.startswith("unknown_citations") for p in not_retrieved.problems), (
+        not_retrieved.problems
+    )
+    made_up = validate.validate(
+        "We work in the manufacturing sector here [COMPANY-secrets].", PROFILE, q
+    )
+    assert "no_citations" in made_up.problems, made_up.problems
+
+
 def test_pii_output_guard_masks_disallowed_types():
     v = validate.validate(
         "HP Rina 081399887766 [CHAT-x-1]", {"CHAT-x-1": "HP 081399887766"}, "hp rina?"
