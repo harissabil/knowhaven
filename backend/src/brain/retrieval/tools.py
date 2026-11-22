@@ -10,15 +10,19 @@ import asyncio
 import time
 from collections import OrderedDict
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
+from brain import guide
 from brain.config import get_settings
-from brain.db.models import Tenant
-from brain.db.session import tenant_session
+from brain.db.models import Container, Role, Tenant, User
+from brain.db.session import global_session, tenant_session
 from brain.llm.embed import GeminiEmbedder, get_embedder
+from brain.policy.idk import GENERIC_CONTACT
+from brain.rbac.capabilities import capabilities
 from brain.rbac.context import RequestContext
+from brain.rbac.visibility import visible_container_clause
 from brain.retrieval import search
 from brain.retrieval.search import NO_PII, Hit, PiiPolicy, SearchResult
 
@@ -188,9 +192,57 @@ class Retriever:
         hits = [] if tenant is None else [_profile_hit(tenant)]
         return self._record("company_profile", {}, SearchResult(hits=hits), t)
 
+    async def self_help(self, texts: list[str]) -> SearchResult:
+        """The asker's own access (always) plus the app-guide articles their question is about.
+
+        Article choice and the role filter are code; `texts` are the question and its search
+        queries, matched against each article's aliases."""
+        t = time.monotonic()
+        async with tenant_session(self.ctx.tenant_id) as s:
+            caps = await capabilities(s, self.ctx)
+            articles, denied = guide.match([x.lower() for x in texts if x], caps)
+            access = await self._access_hit(s, caps, denied)
+        hits = SearchResult(hits=[access, *(_article_hit(a) for a in articles)])
+        return self._record("self_help", {"articles": [a.id for a in articles]}, hits, t)
+
+    async def _access_hit(self, s, caps, denied) -> Hit:
+        ctx = self.ctx
+        tenant = await s.scalar(select(Tenant))
+        role_q = select(Role.name).where(Role.id.in_(sorted(ctx.role_ids))).order_by(Role.name)
+        roles = list(await s.scalars(role_q))
+        vis = select(Container.name).where(visible_container_clause(ctx))
+        folders = list(await s.scalars(vis.order_by(Container.name).limit(guide.MAX_FOLDERS)))
+        total = await s.scalar(select(func.count()).select_from(vis.subquery()))
+        async with global_session() as g:
+            name = await g.scalar(select(User.name).where(User.id == ctx.user_id))
+        company = tenant.name if tenant else ""
+        contact = (tenant.default_contact if tenant else None) or GENERIC_CONTACT
+        text = guide.access_text(
+            name=name, company=company, roles=roles, caps=caps, folders=folders,
+            folder_total=total or 0, contact=contact, denied=denied,
+        )  # fmt: skip
+        now = datetime.now(UTC)
+        return Hit(
+            citation_id=guide.ACCESS_ID, item_id=guide.ACCESS_ID, type="doc", source="system",
+            title="Akses Anda / Your access", container=company, author=None, created_at=now,
+            updated_at=now, authority="official_doc", injection_flag=False, text=text, context=None,
+            url=None, score=0.0,
+        )  # fmt: skip
+
     async def get_item(self, item_id: str) -> SearchResult:
-        if item_id.split("#")[0] == COMPANY_PROFILE_ID:
+        base = item_id.split("#")[0]
+        if base == COMPANY_PROFILE_ID:
             return await self.company_profile()
+        if base == guide.ACCESS_ID:
+            res = await self.self_help([])
+            return SearchResult(hits=res.hits[:1])
+        if base.startswith(guide.HELP_PREFIX):
+            t = time.monotonic()
+            async with tenant_session(self.ctx.tenant_id) as s:
+                a = guide.readable(base, await capabilities(s, self.ctx))
+            # Not for this role and unknown are the same empty result (404 at the API).
+            hits = [_article_hit(a)] if a else []
+            return self._record("get_item", {"item_id": item_id}, SearchResult(hits=hits), t)
         t = time.monotonic()
         async with tenant_session(self.ctx.tenant_id) as s:
             hits = await search.get_item(s, self.ctx, item_id, policy=self.policy)
@@ -208,6 +260,15 @@ def _profile_hit(tenant: Tenant) -> Hit:
         title=f"Profil perusahaan: {tenant.name}", container="Perusahaan", author=None,
         created_at=tenant.created_at, updated_at=tenant.created_at, authority="official_doc",
         injection_flag=False, text="\n".join(lines), context=None, url=None, score=0.0,
+    )  # fmt: skip
+
+
+def _article_hit(a: guide.Article) -> Hit:
+    return Hit(
+        citation_id=a.id, item_id=a.id, type="doc", source="system",
+        title=f"Panduan Knowhaven: {a.title}", container="Panduan Knowhaven", author=None,
+        created_at=guide.STAMP, updated_at=guide.STAMP, authority="official_doc",
+        injection_flag=False, text=a.body, context=None, url=None, score=0.0,
     )  # fmt: skip
 
 

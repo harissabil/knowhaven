@@ -22,6 +22,7 @@ from pathlib import Path
 import httpx
 import yaml
 
+from brain import guide
 from brain.eval import metrics as m
 
 GOLDEN = Path(__file__).resolve().parents[3] / "eval" / "golden.yaml"
@@ -98,7 +99,7 @@ def retrieval_ranking(audit: dict | None) -> list[str]:
     merged: list[str] = []
     for pos in range(max((len(c) for c in calls), default=0)):
         merged += [c[pos] for c in calls if pos < len(c)]
-    return [i for i in m.ranked_items(merged) if not i.startswith("COMPANY-")]
+    return [i for i in m.ranked_items(merged) if not guide.is_system_id(i)]
 
 
 # --------------------------------------------------------------------------- scoring one case

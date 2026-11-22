@@ -162,3 +162,63 @@ async def test_new_company_answers_from_its_profile(make_user):
             pytest.fail(f"{f['decision_path']}: {f['answer']}\n{details}")
         assert "COMPANY-profile" in cited(f)
         assert fact in f["answer"]
+
+
+async def _new_company_owner(make_user):
+    owner = await make_user("Budi Santoso")
+    r = await owner.post("/api/tenants", json={"name": "PT Profil Baru", "industry": "Manufaktur"})
+    tenant_id = uuid.UUID(r.json()["tenant_id"])
+    async with tenant_session(tenant_id) as s:
+        return tenant_id, await load_context(s, tenant_id, uuid.UUID(owner.user_id))
+
+
+async def _why(tenant_id, f) -> str:
+    async with tenant_session(tenant_id) as s:
+        details = await s.scalar(
+            select(AuditLog.details).where(AuditLog.query_id == uuid.UUID(f["query_id"]))
+        )
+    return f"{f['decision_path']}: {f['answer']}\n{details}"
+
+
+async def test_owner_asks_about_their_own_role(make_user):
+    tenant_id, ctx = await _new_company_owner(make_user)
+    for question in (
+        "What can I do with my role?",
+        "I'm the admin, you know?",
+        "Bagaimana cara mengundang karyawan?",
+    ):
+        f = await ask(ctx, question, None, "web", Pipeline())
+        print(
+            f"\n[owner] {question}\n  -> {f['decision_path']} {[c['id'] for c in f['citations']]}\n  {f['answer']}"
+        )
+        if f["decision_path"] != "answer":
+            pytest.fail(await _why(tenant_id, f))
+        assert cited(f) & {"ME-access", "HELP-members-invites"}, cited(f)
+
+
+async def test_owner_dont_know_points_to_adding_a_source(make_user):
+    _, ctx = await _new_company_owner(make_user)
+    f = await ask(ctx, "Berapa hari cuti tahunan karyawan?", None, "web", Pipeline())
+    print(f"\n[owner] cuti -> {f['decision_path']}\n  {f['answer']}")
+    assert f["decision_path"] == "idk" and "Upload Data" in f["answer"]
+
+
+async def test_staff_and_admin_ask_how_to_invite():
+    staff = await q("dimas@srn-demo.id", "Bagaimana cara mengundang karyawan baru ke Knowhaven?")
+    assert staff["decision_path"] == "answer" and "ME-access" in cited(staff)
+    assert "HELP-members-invites" not in cited(staff)
+    boss = await q("bambang@srn-demo.id", "Bagaimana cara mengundang karyawan baru ke Knowhaven?")
+    assert boss["decision_path"] == "answer" and "HELP-members-invites" in cited(boss)
+
+
+async def test_staff_asks_what_they_can_do():
+    f = await q("dimas@srn-demo.id", "Apa saja yang bisa saya lakukan dengan peran saya?")
+    assert f["decision_path"] == "answer" and "ME-access" in cited(f)
+    for admin_only in (
+        "menu Undangan",
+        "menu Anggota",
+        "menu Integrasi",
+        "Upload Data",
+        "Audit Log",
+    ):
+        assert admin_only not in f["answer"], admin_only

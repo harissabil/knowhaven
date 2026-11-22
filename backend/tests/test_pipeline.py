@@ -20,6 +20,7 @@ from brain.ingestion.extract import DictionaryExtractor
 from brain.ingestion.pipeline import Ingestor
 from brain.ingestion.types import IngestItem, Section
 from brain.main import app
+from brain.policy import idk
 from brain.rbac.context import load_context
 from brain.retrieval.tools import Retriever
 from tests.conftest import FakeEmbedder
@@ -419,3 +420,50 @@ async def test_pipeline_pii_remains_masked_unless_query_needs_it(org):
     async with tenant_session(tenant_id) as s:
         row_yes = await s.scalar(select(AuditLog).where(AuditLog.query_id == qid_yes))
     assert row_yes.details["pii_released"] is True
+
+
+async def test_self_help_follows_the_askers_role(org):
+    """ME-access lists only the asker's own access; admin-only guide articles never reach staff."""
+    tenant_id, admin, people = org
+    q = ["bagaimana cara undang karyawan?"]
+    staff = await Retriever(await ctx_of(tenant_id, people["Dimas"])).self_help(q)
+    assert [h.citation_id for h in staff.hits] == ["ME-access"]
+    me = staff.hits[0].text
+    assert "Nama / Name: Dimas" in me and "PT Pipeline" in me
+    assert "HR, Notulen, pengumuman-hr" in me and "proyek-kenari" not in me  # visible folders only
+    assert "menu Undangan" not in me and "menu Upload Data" not in me
+    assert "Not available for your role: Mengundang dan mengelola anggota" in me
+    assert "HR Helpdesk (hr@pipeline.test)" in me  # the company's general contact, not admin names
+
+    boss = await Retriever(await ctx_of(tenant_id, admin)).self_help(q)
+    assert [h.citation_id for h in boss.hits] == ["ME-access", "HELP-members-invites"]
+    assert "menu Undangan" in boss.hits[0].text and "Tidak tersedia" not in boss.hits[0].text
+
+    hr = await Retriever(await ctx_of(tenant_id, people["Sari"])).self_help(
+        ["cara upload dokumen?"]
+    )
+    assert [h.citation_id for h in hr.hits] == ["ME-access", "HELP-upload"]
+    assert "NIK" in hr.hits[0].text  # HR's default personal-data permission
+
+    # Opening a guide article follows the same rule; outside the role it is an ordinary 404.
+    assert (await people["Dimas"].get("/api/sources/HELP-members-invites")).status_code == 404
+    assert (await people["Dimas"].get("/api/sources/HELP-getting-started")).status_code == 200
+    assert (await admin.get("/api/sources/HELP-members-invites")).status_code == 200
+    mine = (await people["Dimas"].get("/api/sources/ME-access")).json()
+    assert "Dimas" in mine["chunks"][0]["text"] and "Not available" not in mine["chunks"][0]["text"]
+
+
+async def test_dont_know_text_follows_the_askers_role_only(org):
+    """Admins are told how to add a source instead of "contact the admin". The text still depends
+    only on who asks: a hidden topic and a missing one read the same to the same person."""
+    tenant_id, admin, people = org
+    for user, marker in ((admin, "Sebagai admin"), (people["Sari"], "lewat menu Upload Data, atau hubungi"),
+                         (people["Dimas"], "silakan hubungi HR Helpdesk")):  # fmt: skip
+        ctx = await ctx_of(tenant_id, user)
+        async with tenant_session(tenant_id) as s:
+            hidden, _, _ = await idk.build(s, ctx, "Proyek Kenari itu apa?", "id", "Proyek Kenari")
+            missing, _, _ = await idk.build(
+                s, ctx, "Proyek Merpati itu apa?", "id", "Proyek Merpati"
+            )
+        assert marker in hidden, hidden
+        assert hidden.replace("Kenari", "X") == missing.replace("Merpati", "X")

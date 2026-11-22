@@ -27,6 +27,7 @@ from datetime import UTC, date, datetime, timedelta
 from agno.agent import Agent
 from sqlalchemy import func, select
 
+from brain import guide
 from brain.agent import prompts
 from brain.agent.mentions import split_mentions
 from brain.agent.schemas import Evidence, Understanding
@@ -43,7 +44,7 @@ from brain.policy import conflict, idk, refusal
 from brain.policy.validate import Validation, validate
 from brain.rbac.context import RequestContext
 from brain.retrieval.search import Hit, SearchResult, pii_policy
-from brain.retrieval.tools import COMPANY_PROFILE_ID, Retriever, format_hits
+from brain.retrieval.tools import Retriever, format_hits
 
 HISTORY_TURNS = 3
 STALE_ANSWER = (
@@ -558,6 +559,9 @@ class _Run:
         jobs.append(
             r.company_profile()
         )  # common knowledge: always available, never crowds out evidence
+        jobs.append(
+            r.self_help(queries)
+        )  # the asker's own access + app-guide articles (code-picked)
         await asyncio.gather(*jobs)
 
     def _found_summary(self) -> str:
@@ -568,7 +572,8 @@ class _Run:
 
     def _evidence_hits(self) -> list[Hit]:
         uniq = {h.citation_id: h for h in self.retriever.seen.values()}
-        profile = uniq.pop(COMPANY_PROFILE_ID, None)
+        # Company profile, ME-access and app-guide articles: always passed on, never take a slot.
+        system = [uniq.pop(k) for k in sorted(uniq) if guide.is_system_id(k)]
         tagged = {d.split("#")[0] for d in self.document_ids}
         ranked = sorted(
             uniq.values(),
@@ -591,7 +596,7 @@ class _Run:
                         h = q.pop(0)
                         top.append(h)
                         picked.add(h.citation_id)
-        return top + [profile] if profile else top
+        return top + system
 
     def _allowed_texts(self) -> dict[str, str]:
         out: dict[str, str] = {}

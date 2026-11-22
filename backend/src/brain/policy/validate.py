@@ -13,8 +13,11 @@ from brain.ingestion import pii
 from brain.policy.conflict import amounts
 
 _BRACKET = re.compile(r"\[([^\[\]]{3,200})\]")
-# Source items, plus the company profile every member may read (retrieval.tools.COMPANY_PROFILE_ID).
-_ID = re.compile(r"^(?:(?:CHAT|DOC|TASK)-[A-Za-z0-9][\w.#-]*|COMPANY-profile)$")
+# Source items, plus the system sources (brain.guide): company profile, the asker's own access,
+# app-guide articles. Like any citation they must also have been retrieved this turn.
+_ID = re.compile(
+    r"^(?:(?:CHAT|DOC|TASK)-[A-Za-z0-9][\w.#-]*|COMPANY-profile|ME-access|HELP-[a-z0-9-]+)$"
+)
 # A citation right after the sentence end belongs to that sentence: "… per bulan. [X]" → "… per bulan [X]."
 _TRAILING_CITE = re.compile(r"([.!?])(\s*)((?:\[[^\[\]]+\]\s*)+)")
 _SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+|\n+")

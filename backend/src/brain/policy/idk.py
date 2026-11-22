@@ -13,6 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from brain.db.models import Container, Tenant, TopicOwner
+from brain.rbac.capabilities import may_upload
 from brain.rbac.context import RequestContext
 from brain.rbac.visibility import visible_container_clause
 
@@ -21,6 +22,20 @@ TEMPLATE = {
           "Untuk pertanyaan ini, silakan hubungi {contact}.",
     "en": 'I couldn\'t find information about "{topic}" in the data I can access. '
           "For this question, please contact {contact}.",
+}  # fmt: skip
+# Members who can add sources get that instead of "contact someone". The choice depends only on
+# the asker's own role, so a hidden topic and a missing one still read the same to the same person.
+TEMPLATE_ADMIN = {
+    "id": 'Saya tidak menemukan informasi tentang "{topic}" di data yang bisa saya akses. '
+          "Sebagai admin, Anda bisa menambahkan sumbernya lewat menu Upload Data atau Integrasi.",
+    "en": 'I couldn\'t find information about "{topic}" in the data I can access. '
+          "As an admin, you can add a source for it from the Upload Data or Integrations menu.",
+}  # fmt: skip
+TEMPLATE_UPLOADER = {
+    "id": 'Saya tidak menemukan informasi tentang "{topic}" di data yang bisa saya akses. '
+          "Anda bisa menambahkan dokumennya lewat menu Upload Data, atau hubungi {contact}.",
+    "en": 'I couldn\'t find information about "{topic}" in the data I can access. '
+          "You can add a document for it from the Upload Data menu, or contact {contact}.",
 }  # fmt: skip
 GATED_NOTE = {
     "id": "Topik ini memerlukan akses khusus; Anda dapat mengajukan akses ke manager.",
@@ -87,7 +102,12 @@ async def build(
     topic = topic_phrase(question, llm_topic)
     match = await match_topic(s, question)
     contact = match.contact if match else await default_contact(s)
-    text = TEMPLATE["en" if lang == "en" else "id"].format(topic=topic, contact=contact)
+    template = TEMPLATE
+    if ctx.is_active and ctx.is_admin:
+        template = TEMPLATE_ADMIN
+    elif ctx.is_active and await may_upload(s, ctx):
+        template = TEMPLATE_UPLOADER
+    text = template["en" if lang == "en" else "id"].format(topic=topic, contact=contact)
     offer = None
     if match and match.tier == "gated" and match.container_id is not None:
         can_see = await s.scalar(
