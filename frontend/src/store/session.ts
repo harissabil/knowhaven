@@ -1,4 +1,5 @@
 "use client";
+import { useEffect, useSyncExternalStore } from "react";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { Role } from "@/lib/permissions";
@@ -191,6 +192,27 @@ export function usePersona(): { persona: Persona | null; roles: Role[]; canAppro
     memberships: currentUser.memberships.map((m) => ({ tenantId: m.tenant_id, status: m.status })),
   };
   return { persona, roles, canApprove: !!active?.can_approve };
+}
+
+const noSubscribe = () => () => {};
+
+/** Where a signed-in user belongs: no company yet, waiting for approval, or Havi. */
+export function homeFor(u: CurrentUser): string {
+  const active = u.active_tenant;
+  return !u.memberships.length || !active ? "/onboarding" : active.status === "pending" ? "/pending" : "/chat";
+}
+
+/**
+ * For public pages (landing, login). The persisted user is only a hint: it is ignored until the
+ * page has mounted (the server render has no user) and corrected once /api/me answers.
+ */
+export function useSignedIn(): { user: CurrentUser | null; ready: boolean } {
+  const user = useSession((s) => s.currentUser);
+  const syncMe = useSession((s) => s.syncMe);
+  // false while hydrating the server HTML, true afterwards
+  const ready = useSyncExternalStore(noSubscribe, () => true, () => false);
+  useEffect(() => { syncMe(); }, [syncMe]);
+  return { user: ready ? user : null, ready };
 }
 
 export function useTenants(): Tenant[] {

@@ -13,12 +13,14 @@ import { Reveal } from "@/components/ui/Reveal";
 import { Spot } from "@/components/ui/Spot";
 import { CountUp } from "@/components/ui/CountUp";
 import { TRACE_STEPS } from "@/mock/chat";
-import { useSession } from "@/store/session";
+import { AccountMenu } from "@/components/AccountMenu";
+import { homeFor, useSession, useSignedIn } from "@/store/session";
 
 const C = {
   id: {
     nav: ["Kenalkan Havi", "Fitur", "Coba sendiri", "Cara kerja", "Keamanan"],
     login: "Masuk", start: "Mulai Sekarang", demo: "Lihat demo",
+    open: "Buka Havi", resume: "Lanjutkan", more: "Gabung / buat perusahaan",
     pill: "Tencent Cloud Hackathon Indonesia 2026",
     h1a: "Semua pengetahuan kantor.",
     h1b: "Cukup sekali tanya.",
@@ -55,6 +57,7 @@ const C = {
   en: {
     nav: ["Meet Havi", "Features", "Try it", "How it works", "Security"],
     login: "Sign in", start: "Start Now", demo: "See demo",
+    open: "Open Havi", resume: "Continue", more: "Join / create a company",
     pill: "Tencent Cloud Hackathon Indonesia 2026",
     h1a: "Your company's knowledge.",
     h1b: "One question away.",
@@ -97,8 +100,11 @@ const MARQUEE = [
 ];
 
 export default function Landing() {
-  const { lang, theme, set, currentUser } = useSession();
+  const { lang, theme, set } = useSession();
+  const { user, ready } = useSignedIn();
   const c = C[lang];
+  const home = user ? homeFor(user) : "/onboarding";
+  const openLabel = home === "/chat" ? c.open : c.resume;
   const href = ["#havi", "#features", "#try", "#how", "#trust"];
   const [ctaHover, setCtaHover] = useState(false);
   const howRef = useRef<HTMLDivElement>(null);
@@ -109,16 +115,29 @@ export default function Landing() {
   return (
     <div className="min-h-screen overflow-x-clip">
       <header className="sticky top-0 z-20 bg-bg/80 backdrop-blur-md border-b border-line">
-        <div className="max-w-6xl mx-auto flex items-center gap-5 px-5 h-16">
+        <div className="max-w-6xl mx-auto flex items-center gap-2 sm:gap-5 px-4 sm:px-5 h-16">
           <Link href="/" className="flex items-center gap-2.5 font-semibold tracking-tight text-lg"><KnowhavenLogo size={28} /> Knowhaven</Link>
           <nav className="hidden lg:flex gap-1 ml-4 text-sm">
-            {c.nav.map((n, i) => <a key={n} href={href[i]} className="px-3 py-1.5 rounded-full text-muted hover:text-fg hover:bg-surface2 transition-colors">{n}</a>)}
+            {c.nav.map((n, i) => <a key={n} href={href[i]} className="whitespace-nowrap px-3 py-1.5 rounded-full text-muted hover:text-fg hover:bg-surface2 transition-colors">{n}</a>)}
           </nav>
           <div className="flex-1" />
-          <button className="btn !px-3" aria-label="theme" onClick={() => set({ theme: theme === "light" ? "dark" : "light" })}>{theme === "light" ? <Moon size={16} /> : <Sun size={16} />}</button>
+          {/* .btn sets display outside Tailwind's layers, so hiding one needs the ! form. */}
+          <button className="btn !px-3 max-sm:!hidden" aria-label="theme" onClick={() => set({ theme: theme === "light" ? "dark" : "light" })}>{theme === "light" ? <Moon size={16} /> : <Sun size={16} />}</button>
           <button className="btn" onClick={() => set({ lang: lang === "id" ? "en" : "id" })}>{lang === "id" ? "EN" : "ID"}</button>
-          <Link href={currentUser ? "/chat" : "/login"} className="btn hidden sm:inline-flex">{c.login}</Link>
-          <Link href="/onboarding" className="btn btn-primary">{c.start}</Link>
+          {/* Hidden until mounted: the server render can't know who is signed in. */}
+          <div className={`flex items-center ${user ? "gap-3" : "gap-5"} ${ready ? "" : "invisible"}`}>
+            {user ? (
+              <>
+                <div className="max-sm:hidden"><AccountMenu user={user} /></div>
+                <Link href={home} className="btn btn-primary">{openLabel} <ArrowRight size={16} /></Link>
+              </>
+            ) : (
+              <>
+                <Link href="/login" className="btn max-sm:!hidden">{c.login}</Link>
+                <Link href="/onboarding" className="btn btn-primary">{c.start}</Link>
+              </>
+            )}
+          </div>
         </div>
       </header>
 
@@ -138,11 +157,13 @@ export default function Landing() {
           <motion.p initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2, duration: 0.6 }}
             className="text-lg md:text-xl text-muted max-w-2xl">{c.sub}</motion.p>
           <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.32, duration: 0.6 }}
-            className="flex flex-wrap gap-3 justify-center">
-            <Link href="/onboarding" className="btn btn-primary btn-lg" onMouseEnter={() => setCtaHover(true)} onMouseLeave={() => setCtaHover(false)}>
-              {c.start} <ArrowRight size={18} />
+            className={`flex flex-wrap gap-3 justify-center ${ready ? "" : "invisible"}`}>
+            <Link href={home} className="btn btn-primary btn-lg" onMouseEnter={() => setCtaHover(true)} onMouseLeave={() => setCtaHover(false)}>
+              {user ? openLabel : c.start} <ArrowRight size={18} />
             </Link>
-            <Link href="/login" className="btn btn-lg">{c.demo}</Link>
+            {user
+              ? <Link href="/onboarding?step=choose" className="btn btn-lg">{c.more}</Link>
+              : <Link href="/login" className="btn btn-lg">{c.demo}</Link>}
           </motion.div>
         </div>
       </section>
@@ -272,8 +293,8 @@ export default function Landing() {
           </div>
           <div className="flex items-center gap-6">
             <Mascot size={120} state={ctaHover ? "celebrate" : "answering"} />
-            <Link href="/onboarding" onMouseEnter={() => setCtaHover(true)} onMouseLeave={() => setCtaHover(false)}
-              className="btn btn-lg !bg-white !text-[#1d1d1f] !border-white hover:!brightness-95">{c.start} <ArrowRight size={18} /></Link>
+            <Link href={home} onMouseEnter={() => setCtaHover(true)} onMouseLeave={() => setCtaHover(false)}
+              className={`btn btn-lg !bg-white !text-[#1d1d1f] !border-white hover:!brightness-95 ${ready ? "" : "invisible"}`}>{user ? openLabel : c.start} <ArrowRight size={18} /></Link>
           </div>
         </div>
       </section>
