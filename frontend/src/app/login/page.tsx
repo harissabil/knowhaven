@@ -3,7 +3,8 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { useSession } from "@/store/session";
+import { ArrowRight } from "lucide-react";
+import { homeFor, useSession, useSignedIn } from "@/store/session";
 import { useL, useT } from "@/lib/i18n";
 import { Mascot, SpeechBubble } from "@/components/mascot/Mascot";
 import { KnowhavenLogo } from "@/components/BrandLogos";
@@ -21,7 +22,8 @@ const DEMO: { email: string; password: string; id: string; en: string }[] = [
 
 export default function Login() {
   const router = useRouter();
-  const { login, lang, set } = useSession();
+  const { login, logout, lang, set } = useSession();
+  const { user } = useSignedIn();
   const t = useT();
   const l = useL();
   const [email, setEmail] = useState("");
@@ -34,11 +36,11 @@ export default function Login() {
     setErr("");
     setLoading(true);
     try {
+      if (user) await logout(); // switching accounts: end the current session first
       const me = await login(email, pw);
-      const active = me.active_tenant;
       const next = new URLSearchParams(window.location.search).get("next");
       if (next?.startsWith("/join/")) return router.push(next); // only same-site invite links
-      router.push(!me.memberships.length || !active ? "/onboarding" : active.status === "pending" ? "/pending" : "/chat");
+      router.push(homeFor(me));
     } catch (x) {
       setErr(x instanceof ApiError && (x.status === 401 || x.status === 422)
         ? l("Email atau kata sandi salah.", "Wrong email or password.")
@@ -60,9 +62,19 @@ export default function Login() {
         </SpeechBubble>
       </div>
       <motion.div className="flex flex-col gap-4 p-6 md:p-12 justify-center max-w-xl w-full mx-auto" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
+        {user && (
+          <div className="card p-5 flex flex-wrap items-center gap-4">
+            <div className="flex-1 min-w-0">
+              <p className="text-sm text-muted">{l("Anda sudah masuk sebagai", "You're signed in as")}</p>
+              <p className="font-semibold truncate">{user.name}</p>
+              <p className="text-sm text-muted truncate">{user.email}{user.active_tenant ? ` · ${user.active_tenant.tenant_name}` : ""}</p>
+            </div>
+            <Link href={homeFor(user)} className="btn btn-primary">{l("Lanjutkan", "Continue")} <ArrowRight size={16} /></Link>
+          </div>
+        )}
         <form onSubmit={submit} className="card p-6 flex flex-col gap-3">
           <div className="flex items-center">
-            <h1 className="text-3xl flex-1">{l("Masuk ke Knowhaven", "Sign in to Knowhaven")}</h1>
+            <h1 className="text-3xl flex-1">{user ? l("Masuk dengan akun lain", "Sign in with another account") : l("Masuk ke Knowhaven", "Sign in to Knowhaven")}</h1>
             <button type="button" className="btn" onClick={() => set({ lang: lang === "id" ? "en" : "id" })}>{lang === "id" ? "EN" : "ID"}</button>
           </div>
           <label className="flex flex-col gap-1">Email

@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowRight, Building2, Check, Eye, EyeOff, KeyRound } from "lucide-react";
 import { Mascot, type MascotState } from "@/components/mascot/Mascot";
@@ -9,7 +9,7 @@ import { KnowhavenLogo } from "@/components/BrandLogos";
 import { Combobox } from "@/components/Combobox";
 import { Confetti } from "@/components/ui/Confetti";
 import { Spot } from "@/components/ui/Spot";
-import { usePersona, useSession } from "@/store/session";
+import { homeFor, usePersona, useSession, useSignedIn } from "@/store/session";
 import { INDUSTRIES } from "@/mock/admin";
 import { useL } from "@/lib/i18n";
 import { ApiError, errorText } from "@/lib/api";
@@ -17,6 +17,10 @@ import { ApiError, errorText } from "@/lib/api";
 type Stage = "account" | "choose" | "company" | "join" | "building";
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const slugOf = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+const stepFromUrl = (): Stage => {
+  const step = new URLSearchParams(window.location.search).get("step");
+  return step === "join" || step === "company" ? step : "choose";
+};
 const HUES = [14, 28, 160, 200, 262, 330];
 const hueOf = (s: string) => HUES[[...s].reduce((a, c) => a + c.charCodeAt(0), 0) % HUES.length];
 const strengthOf = (p: string) =>
@@ -25,9 +29,10 @@ const strengthOf = (p: string) =>
 export default function Onboarding() {
   const router = useRouter();
   const { register, createCompany, joinByCode, lang, set } = useSession();
+  const { user: currentUser } = useSignedIn();
   const { persona } = usePersona();
   const l = useL();
-  const [stage, setStage] = useState<Stage>("account");
+  const [picked, setStage] = useState<Stage | null>(null);
   const [f, setF] = useState({ name: "", email: "", pw: "", company: "", industry: "", industryOther: "", code: "" });
   const [show, setShow] = useState(false);
   const [err, setErr] = useState("");
@@ -37,7 +42,8 @@ export default function Onboarding() {
   const [busy, setBusy] = useState(false);
   const up = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement>) => setF({ ...f, [k]: e.target.value });
 
-  useEffect(() => { if (persona && stage === "account") setStage("choose"); }, [persona, stage]);
+  // Signed in already: skip the account form. ?step=join|company comes from the account menus.
+  const stage: Stage = picked ?? (currentUser ? stepFromUrl() : "account");
 
   const strength = strengthOf(f.pw);
   const STRENGTH = [l("Terlalu pendek", "Too short"), l("Lemah", "Weak"), l("Cukup", "Okay"), l("Kuat", "Strong"), l("Sangat kuat", "Excellent")];
@@ -120,7 +126,14 @@ export default function Onboarding() {
       {/* form side */}
       <div className="flex flex-col p-6 md:p-12">
         <div className="flex items-center gap-3 mb-8">
-          <Link href="/" className="text-sm underline text-muted hover:text-fg flex-1">← {l("Beranda", "Home")}</Link>
+          <span className="flex-1 flex gap-4 text-sm">
+            <Link href="/" className="underline text-muted hover:text-fg">← {l("Beranda", "Home")}</Link>
+            {currentUser?.active_tenant && stage !== "building" && (
+              <Link href={homeFor(currentUser)} className="underline text-muted hover:text-fg">
+                {l(`Kembali ke ${currentUser.active_tenant.tenant_name}`, `Back to ${currentUser.active_tenant.tenant_name}`)}
+              </Link>
+            )}
+          </span>
           <button className="btn" onClick={() => set({ lang: lang === "id" ? "en" : "id" })}>{lang === "id" ? "EN" : "ID"}</button>
         </div>
         <div className="lg:hidden flex justify-center mb-4"><Mascot size={110} state={mood} /></div>

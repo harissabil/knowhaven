@@ -94,8 +94,15 @@ export function Shell({ children, title, fullBleed }: { children: React.ReactNod
       <div className={`flex-1 flex flex-col min-w-0 ${fullBleed ? "h-full overflow-hidden" : ""}`}>
         <header className="sticky top-0 z-10 flex flex-wrap items-center gap-2 border-b border-line bg-bg/80 backdrop-blur-md px-5 py-3 shrink-0">
           {wizard ? <span className="flex items-center gap-2.5 font-bold"><KnowhavenLogo size={28} /> Knowhaven</span> : (
-            <select className={sel} aria-label={t("tenant")} value={s.tenantId ?? ""} onChange={(e) => { setSwitchErr(""); s.setTenant(e.target.value).catch((x) => setSwitchErr(String(x?.message ?? x))); }}>
+            <select className={sel} aria-label={t("tenant")} value={s.tenantId ?? ""} onChange={(e) => {
+              const v = e.target.value;
+              if (v === "join" || v === "company") return router.push(`/onboarding?step=${v}`);
+              setSwitchErr(""); s.setTenant(v).catch((x) => setSwitchErr(String(x?.message ?? x)));
+            }}>
               {myTenants.map((x) => <option key={x.id} value={x.id}>{x.name}{x.status === "pending" ? ` (${l("menunggu", "pending")})` : ""}</option>)}
+              <option disabled>──────────</option>
+              <option value="join">+ {l("Gabung dengan kode", "Join with a code")}</option>
+              <option value="company">+ {l("Buat perusahaan baru", "Create a new company")}</option>
             </select>
           )}
           {switchErr && <span role="alert" className="text-sm text-bad">{switchErr}</span>}
