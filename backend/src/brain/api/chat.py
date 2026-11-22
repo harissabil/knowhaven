@@ -10,7 +10,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
-from brain import storage
+from brain import guide, storage
 from brain.agent.pipeline import Event, Pipeline
 from brain.api.deps import Member
 from brain.db.models import AuditLog, Container, Conversation, Message, SourceItem
@@ -144,7 +144,7 @@ async def conversation(conversation_id: uuid.UUID, ctx: Member) -> list[MessageO
             )
         ).all()
         cited = {c.split("#")[0] for m in msgs for c in m.citations}
-        visible = await filter_visible_ids(s, ctx, cited - {COMPANY_PROFILE_ID})
+        visible = await filter_visible_ids(s, ctx, {c for c in cited if not guide.is_system_id(c)})
         meta = {
             it.id: it
             for it in (await s.execute(
@@ -181,6 +181,19 @@ async def conversation(conversation_id: uuid.UUID, ctx: Member) -> list[MessageO
                             title="Profil perusahaan",
                             container="Perusahaan",
                             date=None,
+                        )
+                    )
+                elif base == guide.ACCESS_ID:
+                    out.append(
+                        CitationOut(
+                            id=c, type="doc", title="Akses Anda", container="Knowhaven", date=None
+                        )
+                    )
+                elif base in guide.ARTICLES:
+                    title = f"Panduan Knowhaven: {guide.ARTICLES[base].title}"
+                    out.append(
+                        CitationOut(
+                            id=c, type="doc", title=title, container="Panduan Knowhaven", date=None
                         )
                     )
                 elif base in meta:

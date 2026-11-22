@@ -8,18 +8,19 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel
-from sqlalchemy import exists, select
+from sqlalchemy import select
 
 from brain import storage
 from brain.api.deps import Member
 from brain.audit import log as audit
-from brain.db.models import Container, Manager, User
+from brain.db.models import Container, User
 from brain.db.session import global_session, tenant_session
 from brain.ingestion.chunking import slugify
 from brain.ingestion.connectors import whatsapp
 from brain.ingestion.connectors.documents import parse_document
 from brain.ingestion.pipeline import Ingestor
 from brain.ingestion.types import IngestItem
+from brain.rbac.capabilities import may_upload
 from brain.rbac.visibility import visible_container_clause
 
 router = APIRouter(tags=["uploads"])
@@ -55,13 +56,6 @@ UPLOAD_SOURCES = ("upload_folder", "whatsapp_group")
 def _ext(filename: str) -> str:
     m = re.search(r"\.[A-Za-z0-9]+$", filename)
     return m.group(0).lower() if m else ""
-
-
-async def may_upload(s, ctx) -> bool:
-    """Admins, HR, and anyone who manages something may add files (4.3)."""
-    if ctx.is_admin or "hr" in ctx.role_keys:
-        return True
-    return bool(await s.scalar(select(exists().where(Manager.manager_user_id == ctx.user_id))))
 
 
 async def writable_container(ctx, container_id: uuid.UUID) -> Container:

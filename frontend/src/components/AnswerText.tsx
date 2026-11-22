@@ -3,10 +3,13 @@
 // ("[DOC-sop-cuti#2]") as small numbered markers that match the numbered source chips below the answer.
 import { Fragment, type ReactNode } from "react";
 
-const ID = String.raw`(?:CHAT|DOC|TASK|COMPANY)-[^\[\]\s,;]+`;
+// Source items, plus system sources: company profile, the asker's access (ME-), app guide (HELP-).
+const PREFIX = "(?:CHAT|DOC|TASK|COMPANY|ME|HELP)";
+const ID = String.raw`${PREFIX}-[^\[\]\s,;]+`;
 const CITE = new RegExp(String.raw`\[(${ID}(?:[,;\s]+${ID})*)\]`, "g");
 const CITE_TOKEN = new RegExp(String.raw`^\[${ID}(?:[,;\s]+${ID})*\]$`);
 const INLINE = new RegExp(String.raw`(\*\*[^*\n]+\*\*|\[${ID}(?:[,;\s]+${ID})*\])`, "g");
+const BEFORE_CITE = new RegExp(String.raw`\s+(?=\[${PREFIX}-)`, "g");
 const BULLET = /^\s*[-*•]\s+(.*)$/;
 const NUMBERED = /^\s*(\d{1,2})[.)]\s+(.*)$/;
 // While streaming, a citation may be cut in half ("... [DOC-sop-cu"): hide it until it closes.
@@ -37,7 +40,7 @@ export function AnswerText({ text, sources, onOpen }: Props) {
   };
 
   const inline = (line: string): ReactNode[] =>
-    line.replace(/\s+(?=\[(?:CHAT|DOC|TASK|COMPANY)-)/g, "").split(INLINE).map((part, k) => {
+    line.replace(BEFORE_CITE, "").split(INLINE).map((part, k) => {
       if (part.startsWith("**") && part.endsWith("**") && part.length > 4) return <b key={k}>{part.slice(2, -2)}</b>;
       if (CITE_TOKEN.test(part)) {
         const ids = part.slice(1, -1).split(/[,;\s]+/).filter(Boolean);
