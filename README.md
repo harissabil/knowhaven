@@ -106,7 +106,7 @@ a project that does not exist return the same text.
 
 ### Architecture
 
-![Knowhaven architecture](https://github.com/user-attachments/assets/e823fbd5-726b-4884-9dc6-e4a98b9b2eef)
+![Knowhaven architecture](https://github.com/user-attachments/assets/138efca0-0303-4715-8c80-d378d3e34178)
 
 | Trust boundary | What crosses it | How it is enforced |
 |---|---|---|
