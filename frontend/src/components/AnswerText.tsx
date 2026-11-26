@@ -14,6 +14,16 @@ const BULLET = /^\s*[-*•]\s+(.*)$/;
 const NUMBERED = /^\s*(\d{1,2})[.)]\s+(.*)$/;
 // While streaming, a citation may be cut in half ("... [DOC-sop-cu"): hide it until it closes.
 const OPEN_TAIL = /\s*\[(?:[A-Z]{0,7}(?:-[^\]\n]*)?)?$/;
+// Masked personal data ("0813****7766", "r***@gmail.com", "12.***.***.*-***.345", "******1234") is
+// often written in bold ("**0813****7766**"); its stars must not be read as bold markers. A run is a
+// mask when it sits inside a value (after a letter, digit, "." or "-", before a letter, digit or "@",
+// or before "."/"-" that continues the value), or is 3+ stars leading into one. Bold markers are
+// 2 stars next to a space or an edge, so they never match.
+const MASK = /(?<=[\p{L}\p{N}.-])\*+(?=[\p{L}\p{N}@]|[.-][\p{L}\p{N}*])|\*{3,}(?=[\p{L}\p{N}@])/gu;
+const HIDDEN = String.fromCharCode(0xe000); // private-use placeholder for a masked character while parsing bold
+const unhide = (s: string) => s.replaceAll(HIDDEN, "*");
+/** Models sometimes escape the stars of a mask ("0812\*\*\*\*5566"); show them as written in the source. */
+const unescapeStars = (s: string) => s.replace(/\\\*/g, "*");
 
 /** Source ids in order of first appearance: the same order the backend numbers its citations. */
 export function citationOrder(text: string): string[] {
@@ -32,7 +42,7 @@ type Props = {
 };
 
 export function AnswerText({ text, sources, onOpen }: Props) {
-  const clean = text.replace(OPEN_TAIL, "");
+  const clean = unescapeStars(text.replace(OPEN_TAIL, ""));
   const order = sources && sources.length ? sources : citationOrder(clean);
   const numberOf = (id: string) => {
     const i = order.indexOf(id);
@@ -40,8 +50,8 @@ export function AnswerText({ text, sources, onOpen }: Props) {
   };
 
   const inline = (line: string): ReactNode[] =>
-    line.replace(BEFORE_CITE, "").split(INLINE).map((part, k) => {
-      if (part.startsWith("**") && part.endsWith("**") && part.length > 4) return <b key={k}>{part.slice(2, -2)}</b>;
+    line.replace(BEFORE_CITE, "").replace(MASK, (run) => HIDDEN.repeat(run.length)).split(INLINE).map((part, k) => {
+      if (part.startsWith("**") && part.endsWith("**") && part.length > 4) return <b key={k}>{unhide(part.slice(2, -2))}</b>;
       if (CITE_TOKEN.test(part)) {
         const ids = part.slice(1, -1).split(/[,;\s]+/).filter(Boolean);
         return (
@@ -60,7 +70,7 @@ export function AnswerText({ text, sources, onOpen }: Props) {
           </Fragment>
         );
       }
-      return <Fragment key={k}>{part}</Fragment>;
+      return <Fragment key={k}>{unhide(part)}</Fragment>;
     });
 
   // Group lines into paragraphs and lists.
