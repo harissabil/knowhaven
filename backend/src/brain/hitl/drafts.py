@@ -7,7 +7,6 @@ owner → document owner → managers → admins) approves it; then `executors.e
 """
 
 import difflib
-import re
 import uuid
 from datetime import UTC, datetime
 
@@ -19,26 +18,8 @@ from brain.db.models import ActionDraft, Chunk, SourceItem
 from brain.hitl import approvers, executors
 from brain.hitl.access import HitlError
 from brain.ingestion.pipeline import Ingestor
-from brain.policy.conflict import _AMOUNT, amounts
+from brain.policy.conflict import amounts, format_amount, replace_amount
 from brain.rbac.context import RequestContext
-
-
-def format_amount(n: int) -> str:
-    return "Rp" + f"{n:,}".replace(",", ".")
-
-
-def replace_amount(text: str, old: int, new: int) -> tuple[str, int]:
-    """Replace every occurrence of the amount `old` in `text` with `new` (Indonesian format)."""
-    count = 0
-
-    def sub(m: re.Match) -> str:
-        nonlocal count
-        if amounts(m.group(0)) == [old]:
-            count += 1
-            return format_amount(new)
-        return m.group(0)
-
-    return _AMOUNT.sub(sub, text), count
 
 
 async def propose(
