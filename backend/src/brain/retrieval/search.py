@@ -200,6 +200,38 @@ def _detail_query():
     )
 
 
+def _names_in(row, entities: list[str]) -> bool:
+    c = row.Chunk
+    hay = " ".join(f"{c.context_text or ''} {c.text_masked}".casefold().split())
+    return any(e in hay for e in entities)
+
+
+def _pick(rows, policy: PiiPolicy, limit: int, entities) -> list[Hit]:
+    """Best chunks in score order, at most MAX_CHUNKS_PER_ITEM per item.
+
+    When the question names someone or something (`entities`), an item's slots go to its chunks
+    that mention it: in a 25-person directory the intro and header chunks outrank the table row
+    with "Rina Wulandari" on every phone question, and the answer was then "not found". Which
+    items are picked does not change, only which of their chunks."""
+    names = [" ".join(e.casefold().split()) for e in entities if len(e.strip()) >= 3]
+    kept: list = []
+    per_item: dict[str, list[int]] = {}  # item -> indexes into `kept`
+    for row in rows:
+        slots = per_item.setdefault(row.SourceItem.id, [])
+        if len(slots) < MAX_CHUNKS_PER_ITEM:
+            if len(kept) == limit:
+                continue  # full: only a better chunk of an item already kept can still come in
+            slots.append(len(kept))
+            kept.append(row)
+        elif names and _names_in(row, names):
+            # Replace this item's lowest-scored chunk that doesn't mention the name, if any.
+            for i in reversed(slots):
+                if not _names_in(kept[i], names):
+                    kept[i] = row
+                    break
+    return [_hit(r, policy) for r in kept]
+
+
 async def hybrid_search(
     s: AsyncSession,
     ctx: RequestContext,
@@ -233,14 +265,7 @@ async def hybrid_search(
                 .limit(limit * 3)
             )
         ).all()
-        per_item: dict[str, int] = {}
-        for row in rows:
-            n = per_item.get(row.SourceItem.id, 0)
-            if n < MAX_CHUNKS_PER_ITEM:
-                per_item[row.SourceItem.id] = n + 1
-                result.hits.append(_hit(row, policy))
-            if len(result.hits) == limit:
-                break
+        result.hits = _pick(rows, policy, limit, entities)
     result.filtered_count, result.filtered_ids = await _filtered(s, ctx, types, tsq, names)
     return result
 
