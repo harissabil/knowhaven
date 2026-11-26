@@ -133,6 +133,22 @@ async def test_t18_pii_masked_for_staff_open_for_hr():
     assert "3171041508990003" in hr["answer"]
 
 
+@pytest.mark.parametrize(
+    "question",
+    [
+        "Nomor HP Rina Wulandari berapa?",
+        "Berapa nomor hp rina wulandari?",
+        "nomor hp rina wulandari",
+    ],
+)
+async def test_staff_gets_a_colleagues_masked_phone(question):
+    """Rina's row sits deep in a 25-person directory table; the intro chunk used to take the
+    directory's slots and the answer was "not found"."""
+    f = await q("dimas@srn-demo.id", question)
+    assert f["decision_path"] != "idk", f["answer"]
+    assert "0813****7766" in f["answer"].replace("\\*", "*"), f["answer"]
+
+
 async def test_t28_other_tenant_sees_nothing():
     f = await q("wulan@klm-demo.id", "Proyek Kenari itu apa?", slug="klm")
     assert f["decision_path"] == "idk" and not any(c.startswith(KENARI) for c in cited(f))
