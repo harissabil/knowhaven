@@ -15,6 +15,7 @@ be bypassed (13.2).
 """
 
 import argparse
+import re
 import time
 import uuid
 from collections import defaultdict, deque
@@ -127,8 +128,20 @@ async def _context(ctx: Context) -> RequestContext:
     return rc
 
 
+# Masked personal data ("0813****7766", "r***@gmail.com", "12.***.***.*-***.345", "******1234"):
+# a star run inside a value, or 3+ stars leading into one. WorkBuddy renders Markdown, where those
+# stars pair up as emphasis ("**0813****7766**" shows as "08137766"), so they are escaped. Bold
+# markers are 2 stars next to a space or an edge and never match. Same rule as the web's AnswerText.
+_MASK = re.compile(r"(?<=[\w.-])\*+(?=[\w@]|[.-][\w*])|\*{3,}(?=[\w@])")
+
+
+def md_safe(text: str) -> str:
+    """Escape the stars of masked values for a Markdown client (already-escaped ones stay single)."""
+    return _MASK.sub(lambda m: "\\*" * len(m.group(0)), text.replace("\\*", "*"))
+
+
 def _format_answer(final: dict) -> str:
-    lines = [final.get("answer", "")]
+    lines = [md_safe(final.get("answer", ""))]
     cites = final.get("citations") or []
     if cites:
         lines += ["", "Sumber:"]
@@ -197,7 +210,7 @@ def build_server() -> MCPServer:
             return NOT_FOUND  # identical for forbidden and non-existent IDs (T24)
         h = res.hits[0]
         head = f"[{h.item_id}] {h.title or h.container} ({h.container}, {h.updated_at.date().isoformat()})"
-        body = "\n\n".join(f"[{x.citation_id}]\n{x.text}" for x in res.hits)
+        body = "\n\n".join(f"[{x.citation_id}]\n{md_safe(x.text)}" for x in res.hits)
         return f"{head}\n\n{body}"
 
     @mcp.tool(
