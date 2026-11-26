@@ -43,6 +43,27 @@ def amounts(text: str) -> list[int]:
     return out
 
 
+def format_amount(n: int) -> str:
+    return "Rp" + f"{n:,}".replace(",", ".")
+
+
+def replace_amount(text: str, old: int, new: int) -> tuple[str, int]:
+    """Replace every occurrence of the amount `old` in `text` with `new` (Indonesian format)."""
+    count = 0
+
+    def sub(m: re.Match) -> str:
+        nonlocal count
+        tok = m.group(0)
+        if amounts(tok) == [old]:
+            count += 1
+            # The pattern also takes the spaces before an optional unit ("Rp500.000 per bulan"
+            # matches "Rp500.000 "): keep them, or the result reads "Rp600.000per bulan".
+            return format_amount(new) + tok[len(tok.rstrip()) :]
+        return tok
+
+    return _AMOUNT.sub(sub, text), count
+
+
 def normalize_value(value: str) -> str:
     nums = amounts(value)
     if nums:
