@@ -196,7 +196,9 @@ async def test_conflict_answer_is_streamed_validated_and_recorded(org):
     assert f["conflicts"][0]["reason"] == "announcement_newer_than_doc"
     assert any(e.name == "delta" for e in events)
     done = [e.data["step"] for e in events if e.name == "trace" and e.data["status"] == "done"]
-    assert done == [1, 2, 3, 4, 5, 6, 7]
+    assert done == [1, 2, 3, 4, 5, 6, 7, 8]  # step 8 (record) is streamed too, not only stored
+    before_final = events[[e.name for e in events].index("final") - 1]
+    assert before_final.name == "trace" and before_final.data["step"] == 8
 
     qid = uuid.UUID(f["query_id"])
     async with tenant_session(tenant_id) as s:
