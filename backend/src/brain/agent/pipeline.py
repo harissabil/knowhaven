@@ -225,6 +225,7 @@ class _Run:
         self.history: list[tuple[str, str]] = []
         self.notes: list[str] = []
         self.details: dict = {}
+        self.recorded: Event | None = None  # step 8's "done" trace, streamed just before "final"
 
     # --- trace helpers -------------------------------------------------------------------
 
@@ -257,6 +258,8 @@ class _Run:
     async def go(self) -> AsyncIterator[Event]:
         try:
             async for ev in self._steps():
+                if ev.name == "final" and self.recorded:  # step 8 runs inside _finish
+                    yield self.recorded
                 yield ev
         except Exception as e:  # noqa: BLE001 - never leak internals; record and answer generically
             self.details["error"] = f"{type(e).__name__}: {e}"[:500]
@@ -264,6 +267,8 @@ class _Run:
             try:
                 final = await self._finish(text, "error", [], [], None, [])
                 yield Event("error", {"message": text, "query_id": str(self.query_id)})
+                if self.recorded:
+                    yield self.recorded
                 yield final
             except Exception:  # noqa: BLE001
                 yield Event("error", {"message": text})
@@ -661,7 +666,7 @@ class _Run:
             s.add(Message(tenant_id=ctx.tenant_id, conversation_id=self.conversation_id, role="assistant",
                     created_at=asked_at + timedelta(milliseconds=1), content=text,
                           citations=list(citations), permission_version=ctx.permission_version, query_id=self.query_id))  # fmt: skip
-            self._end(st, "Dicatat")
+            self.recorded = self._end(st, "Dicatat")
             for x in self.steps:
                 s.add(TraceEvent(tenant_id=ctx.tenant_id, query_id=self.query_id, step=x.step, label=x.label, name=x.name,
                                  started_at=x.started, ended_at=x.ended, summary_user=x.summary,
